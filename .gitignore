@@ -1,0 +1,6 @@
+results/
+Rplots.pdf
+.Rhistory
+.RData
+.Ruserdata
+.DS_Store

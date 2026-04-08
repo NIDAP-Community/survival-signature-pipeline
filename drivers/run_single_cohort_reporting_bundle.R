@@ -1,0 +1,351 @@
+#!/usr/bin/env Rscript
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(readr)
+  library(ggplot2)
+})
+
+source("src/utilities/run_provenance_guardrails.R")
+
+cli_defaults <- list(
+  input_run_dir = "",
+  output_dir = default_run_output_dir("single_cohort_reporting_bundle"),
+  subgroup_summary_csv = "",
+  subgroup_column = "subgroup",
+  subgroup_type_column = "subgroup_type",
+  feature_column = "feature",
+  endpoint_column = "endpoint",
+  comparison_column = "comparison",
+  hr_column = "HR",
+  ci_low_column = "CI_low",
+  ci_high_column = "CI_high",
+  p_value_column = "p_value",
+  p_value_bh_column = "p_value_bh"
+)
+
+print_usage <- function(defaults) {
+  cat(
+    paste(
+      "Single-Cohort Reporting Bundle Driver",
+      "",
+      "Usage:",
+      "  Rscript drivers/run_single_cohort_reporting_bundle.R [--flag value]...",
+      "  Rscript entrypoint.R single-cohort-reporting-bundle [--flag value]...",
+      "",
+      "Key notes:",
+      "  - This workflow is downstream-only and expects a prior single-cohort run directory with run_manifest.csv and endpoint RDS outputs.",
+      "  - It always builds an overall forest-style summary from available endpoint result objects.",
+      "  - It only builds a heatmap when subgroup_summary_csv is provided with explicit subgroup rows.",
+      "  - The shared subgroup-summary contract uses subgroup, subgroup_type, feature, endpoint, comparison, HR, CI_low, CI_high, p_value, and p_value_bh.",
+      "",
+      "Important flags:",
+      paste(vapply(names(defaults), function(name) {
+        paste0("  --", gsub("_", "-", name), " (default: ", defaults[[name]], ")")
+      }, character(1)), collapse = "\n"),
+      sep = "\n"
+    ),
+    "\n"
+  )
+}
+
+parse_cli <- function(defaults) {
+  args <- commandArgs(trailingOnly = TRUE)
+  if (!length(args) || any(args %in% c("--help", "-h", "help"))) {
+    print_usage(defaults)
+    quit(save = "no", status = 0)
+  }
+  index <- 1
+  while (index <= length(args)) {
+    key <- args[[index]]
+    if (!startsWith(key, "--")) stop("Arguments must be supplied as --flag value pairs. Offending token: ", key)
+    key_clean <- gsub("-", "_", substring(key, 3))
+    if (!key_clean %in% names(defaults)) stop("Unknown argument: ", key)
+    if (index == length(args)) stop("No value supplied for argument ", key)
+    defaults[[key_clean]] <- args[[index + 1]]
+    index <- index + 2
+  }
+  defaults
+}
+
+fmt_num <- function(x, digits = 3) {
+  ifelse(is.na(x), NA_character_, formatC(x, format = "f", digits = digits))
+}
+
+fmt_p <- function(x) {
+  ifelse(
+    is.na(x),
+    NA_character_,
+    ifelse(x < 0.001, formatC(x, format = "e", digits = 2), formatC(x, format = "f", digits = 3))
+  )
+}
+
+fmt_ci <- function(low, high) {
+  paste0("[", fmt_num(low, 3), ", ", fmt_num(high, 3), "]")
+}
+
+extract_signature_summary <- function(signature_summary, endpoint_name, model_label) {
+  if (is.null(signature_summary) || !inherits(signature_summary, "summary.coxph")) return(NULL)
+  row_name <- if ("clusterC" %in% rownames(signature_summary$coefficients)) "clusterC" else rownames(signature_summary$coefficients)[1]
+  if (is.na(row_name) || !nzchar(row_name)) return(NULL)
+
+  data.frame(
+    endpoint = endpoint_name,
+    feature = "Signature",
+    model = model_label,
+    HR = signature_summary$conf.int[row_name, "exp(coef)"],
+    CI_low = signature_summary$conf.int[row_name, "lower .95"],
+    CI_high = signature_summary$conf.int[row_name, "upper .95"],
+    p_value = signature_summary$coefficients[row_name, "Pr(>|z|)"],
+    q_value = NA_real_,
+    comparison = "High vs Low",
+    stringsAsFactors = FALSE
+  )
+}
+
+extract_gene_table <- function(result_table, endpoint_name, model_label) {
+  if (is.null(result_table) || !is.data.frame(result_table) || !nrow(result_table)) return(NULL)
+
+  gene_column <- if ("Gene" %in% names(result_table)) "Gene" else names(result_table)[1]
+  p_column <- if ("P_Value" %in% names(result_table)) "P_Value" else if ("p_value" %in% names(result_table)) "p_value" else NULL
+  q_column <- if ("FDR" %in% names(result_table)) "FDR" else if ("p_value_bh" %in% names(result_table)) "p_value_bh" else NULL
+  ci_low_column <- if ("CI_Lower" %in% names(result_table)) "CI_Lower" else if ("CI_low" %in% names(result_table)) "CI_low" else NULL
+  ci_high_column <- if ("CI_Upper" %in% names(result_table)) "CI_Upper" else if ("CI_high" %in% names(result_table)) "CI_high" else NULL
+
+  if (!("HR" %in% names(result_table)) || is.null(p_column) || is.null(ci_low_column) || is.null(ci_high_column)) return(NULL)
+
+  result_table %>%
+    transmute(
+      endpoint = endpoint_name,
+      feature = .data[[gene_column]],
+      model = model_label,
+      HR = .data[["HR"]],
+      CI_low = .data[[ci_low_column]],
+      CI_high = .data[[ci_high_column]],
+      p_value = .data[[p_column]],
+      q_value = if (!is.null(q_column)) .data[[q_column]] else NA_real_,
+      comparison = "Continuous"
+    )
+}
+
+build_overall_forest <- function(forest_df, output_stub) {
+  plot_df <- forest_df %>%
+    filter(is.finite(.data$CI_low), is.finite(.data$CI_high), .data$CI_low > 0, .data$CI_high > 0) %>%
+    mutate(
+      feature_label = factor(paste(.data$feature, .data$model, sep = " | "), levels = rev(unique(paste(.data$feature, .data$model, sep = " | ")))),
+      significant = !is.na(.data$q_value) & .data$q_value < 0.05
+    )
+
+  forest_plot <- ggplot(plot_df, aes(x = .data$HR, y = .data$feature_label)) +
+    geom_vline(xintercept = 1, linetype = "dashed", color = "grey50", linewidth = 0.4) +
+    geom_errorbar(aes(xmin = .data$CI_low, xmax = .data$CI_high), orientation = "y", width = 0.2, color = "grey35", linewidth = 0.5) +
+    geom_point(aes(fill = .data$significant), shape = 21, size = 2.8, color = "black", stroke = 0.35) +
+    facet_grid(endpoint ~ ., scales = "free_y", space = "free_y") +
+    scale_x_log10() +
+    scale_fill_manual(values = c("FALSE" = "white", "TRUE" = "#c44e52"), guide = "none") +
+    labs(
+      title = "Single-Cohort Overall Effects",
+      subtitle = "Available gene and signature hazard ratios by endpoint",
+      x = "Hazard ratio (log scale)",
+      y = NULL
+    ) +
+    theme_bw(base_size = 10) +
+    theme(
+      strip.background = element_rect(fill = "grey95"),
+      panel.grid.minor = element_blank(),
+      panel.grid.major.y = element_blank(),
+      plot.title = element_text(face = "bold")
+    )
+
+  ggsave(paste0(output_stub, ".png"), forest_plot, width = 10.5, height = 7.5, dpi = 300)
+  ggsave(paste0(output_stub, ".pdf"), forest_plot, width = 10.5, height = 7.5)
+}
+
+build_subgroup_heatmap <- function(subgroup_df, output_stub, subgroup_column, feature_column, endpoint_column, comparison_column, hr_column, p_value_column, p_value_bh_column) {
+  plot_df <- subgroup_df %>%
+    mutate(
+      subgroup_label = as.character(.data[[subgroup_column]]),
+      feature_label = as.character(.data[[feature_column]]),
+      endpoint_label = as.character(.data[[endpoint_column]]),
+      comparison_label = if (comparison_column %in% names(subgroup_df)) as.character(.data[[comparison_column]]) else "Overall",
+      log2_hr = log2(.data[[hr_column]]),
+      significance_label = case_when(
+        !is.na(.data[[p_value_bh_column]]) & .data[[p_value_bh_column]] < 0.10 ~ "q<0.10",
+        !is.na(.data[[p_value_column]]) & .data[[p_value_column]] < 0.05 ~ "p<0.05",
+        TRUE ~ "NS"
+      )
+    )
+
+  heatmap_plot <- ggplot(plot_df, aes(x = .data$subgroup_label, y = .data$feature_label, fill = .data$log2_hr)) +
+    geom_tile(color = "white", linewidth = 0.5) +
+    geom_point(
+      data = plot_df %>% filter(.data$significance_label != "NS"),
+      aes(shape = .data$significance_label),
+      size = 2.4,
+      stroke = 0.5,
+      fill = "#ffd166",
+      color = "black"
+    ) +
+    facet_grid(endpoint_label ~ comparison_label) +
+    scale_shape_manual(values = c("p<0.05" = 21, "q<0.10" = 23), name = NULL) +
+    scale_fill_gradient2(
+      low = "#2b6cb0",
+      mid = "#f7f7f7",
+      high = "#b22222",
+      midpoint = 0,
+      oob = scales::squish,
+      name = "log2(HR)"
+    ) +
+    labs(
+      title = "Single-Cohort Subgroup Effects",
+      subtitle = "Optional subgroup heatmap generated from explicit subgroup summary rows",
+      x = NULL,
+      y = NULL
+    ) +
+    theme_minimal(base_size = 10) +
+    theme(
+      panel.grid = element_blank(),
+      strip.text = element_text(face = "bold"),
+      plot.title = element_text(face = "bold")
+    )
+
+  ggsave(paste0(output_stub, ".png"), heatmap_plot, width = 10, height = 6, dpi = 300)
+  ggsave(paste0(output_stub, ".pdf"), heatmap_plot, width = 10, height = 6)
+}
+
+opt <- parse_cli(cli_defaults)
+
+if (!nzchar(opt$input_run_dir)) {
+  stop("Missing required input argument: --input-run-dir")
+}
+
+assert_output_guardrails(opt$output_dir)
+
+manifest_path <- file.path(opt$input_run_dir, "run_manifest.csv")
+if (!file.exists(manifest_path)) {
+  stop("input_run_dir is missing run_manifest.csv: ", manifest_path)
+}
+
+manifest_df <- readr::read_csv(manifest_path, show_col_types = FALSE)
+if (!all(c("endpoint", "endpoint_dir") %in% names(manifest_df))) {
+  stop("run_manifest.csv must contain endpoint and endpoint_dir columns.")
+}
+
+dir.create(opt$output_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(file.path(opt$output_dir, "figures"), recursive = TRUE, showWarnings = FALSE)
+dir.create(file.path(opt$output_dir, "tables"), recursive = TRUE, showWarnings = FALSE)
+dir.create(file.path(opt$output_dir, "logs"), recursive = TRUE, showWarnings = FALSE)
+
+forest_rows <- list()
+
+for (row_index in seq_len(nrow(manifest_df))) {
+  endpoint_name <- as.character(manifest_df$endpoint[[row_index]])
+  endpoint_dir <- as.character(manifest_df$endpoint_dir[[row_index]])
+  result_path <- file.path(endpoint_dir, paste0(endpoint_name, "_results.rds"))
+  if (!file.exists(result_path)) {
+    stop("Missing endpoint result object: ", result_path)
+  }
+
+  result_obj <- readRDS(result_path)
+
+  forest_rows[[length(forest_rows) + 1]] <- extract_gene_table(result_obj$results_univariate, endpoint_name, "gene_unadjusted")
+  forest_rows[[length(forest_rows) + 1]] <- extract_gene_table(result_obj$results_adjusted, endpoint_name, "gene_adjusted")
+  forest_rows[[length(forest_rows) + 1]] <- extract_signature_summary(result_obj$results_signature$unadjusted, endpoint_name, "signature_unadjusted")
+  forest_rows[[length(forest_rows) + 1]] <- extract_signature_summary(result_obj$results_signature$adjusted, endpoint_name, "signature_adjusted")
+}
+
+forest_df <- bind_rows(Filter(Negate(is.null), forest_rows))
+if (!nrow(forest_df)) {
+  stop("No overall effect rows could be extracted from the single-cohort run outputs.")
+}
+
+readr::write_csv(forest_df, file.path(opt$output_dir, "tables", "single_cohort_overall_effects.csv"))
+
+forest_md <- forest_df %>%
+  transmute(
+    endpoint = endpoint,
+    feature = feature,
+    model = model,
+    comparison = comparison,
+    HR = fmt_num(HR, 3),
+    `95% CI` = fmt_ci(CI_low, CI_high),
+    p = fmt_p(p_value),
+    q = fmt_p(q_value)
+  )
+
+writeLines(
+  c(
+    "| Endpoint | Feature | Model | Comparison | HR | 95% CI | p | q |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    apply(forest_md, 1, function(row) paste0("| ", paste(row, collapse = " | "), " |"))
+  ),
+  con = file.path(opt$output_dir, "tables", "single_cohort_overall_effects.md")
+)
+
+build_overall_forest(forest_df, file.path(opt$output_dir, "figures", "figure1_single_cohort_overall_forest"))
+
+notes <- character(0)
+
+if (nzchar(opt$subgroup_summary_csv)) {
+  if (!file.exists(opt$subgroup_summary_csv)) {
+    stop("subgroup_summary_csv does not exist: ", opt$subgroup_summary_csv)
+  }
+  subgroup_df <- readr::read_csv(opt$subgroup_summary_csv, show_col_types = FALSE)
+  required_subgroup_columns <- c(opt$subgroup_column, opt$feature_column, opt$endpoint_column, opt$hr_column, opt$ci_low_column, opt$ci_high_column, opt$p_value_column, opt$p_value_bh_column)
+  missing_subgroup_columns <- setdiff(required_subgroup_columns, names(subgroup_df))
+  if (length(missing_subgroup_columns)) {
+    stop("subgroup_summary_csv is missing required columns: ", paste(missing_subgroup_columns, collapse = ", "))
+  }
+  normalized_subgroup_df <- subgroup_df %>%
+    mutate(
+      subgroup = .data[[opt$subgroup_column]],
+      subgroup_type = if (opt$subgroup_type_column %in% names(subgroup_df)) .data[[opt$subgroup_type_column]] else "subgroup",
+      feature = .data[[opt$feature_column]],
+      endpoint = .data[[opt$endpoint_column]],
+      comparison = if (opt$comparison_column %in% names(subgroup_df)) .data[[opt$comparison_column]] else "Overall",
+      HR = .data[[opt$hr_column]],
+      CI_low = .data[[opt$ci_low_column]],
+      CI_high = .data[[opt$ci_high_column]],
+      p_value = .data[[opt$p_value_column]],
+      p_value_bh = .data[[opt$p_value_bh_column]]
+    ) %>%
+    select(subgroup, subgroup_type, feature, endpoint, comparison, HR, CI_low, CI_high, p_value, p_value_bh, everything())
+  readr::write_csv(normalized_subgroup_df, file.path(opt$output_dir, "tables", "consumed_subgroup_summary.csv"))
+  build_subgroup_heatmap(
+    normalized_subgroup_df,
+    file.path(opt$output_dir, "figures", "figure2_single_cohort_subgroup_heatmap"),
+    "subgroup",
+    "feature",
+    "endpoint",
+    "comparison",
+    "HR",
+    "p_value",
+    "p_value_bh"
+  )
+} else {
+  notes <- c(notes, "No subgroup_summary_csv was provided, so the subgroup heatmap was intentionally skipped.")
+  writeLines(
+    c(
+      "# Heatmap Skipped",
+      "",
+      "No subgroup summary table was provided.",
+      "The single-cohort reporting bundle therefore generated the overall forest figure only."
+    ),
+    con = file.path(opt$output_dir, "figures", "figure2_single_cohort_subgroup_heatmap_skipped.md")
+  )
+}
+
+write_run_metadata_guardrail(
+  output_dir = opt$output_dir,
+  purpose = "Assemble single-cohort reporting artifacts from a prior single-cohort analysis run.",
+  driver = "drivers/run_single_cohort_reporting_bundle.R",
+  inputs = list(
+    input_run_dir = opt$input_run_dir,
+    subgroup_summary_csv = if (nzchar(opt$subgroup_summary_csv)) opt$subgroup_summary_csv else ""
+  ),
+  parameters = as.list(opt),
+  notes = notes,
+  scope = "exploratory"
+)
+
+message("Single-cohort reporting bundle written to: ", opt$output_dir)

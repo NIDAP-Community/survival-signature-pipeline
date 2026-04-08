@@ -1,0 +1,11 @@
+sampnames,Subtype,Diagnosis_Age,stage_collapsed,OS,OS_time,PFI,PFI_time
+MB_Basal_A,BRCA_Basal,45,Late,1,20,1,14
+MB_Basal_B,BRCA_Basal,48,Late,1,26,1,20
+MB_Basal_C,BRCA_Basal,51,Early,0,68,0,58
+MB_Basal_D,BRCA_Basal,54,Late,1,76,1,64
+MB_Basal_E,BRCA_Basal,57,Early,0,102,0,92
+MB_Basal_F,BRCA_Basal,60,Late,1,44,1,30
+MB_LumA_A,BRCA_LumA,59,Early,0,88,0,76
+MB_LumA_B,BRCA_LumA,62,Early,0,108,0,94
+MB_LumA_C,BRCA_LumA,66,Late,1,58,1,42
+MB_LumA_D,BRCA_LumA,69,Early,0,126,0,110

@@ -1,0 +1,138 @@
+# Decision Log
+
+## 2026-04-08: Standardize Around One Maintained Root CLI
+
+Decision:
+
+- Use entrypoint.R as the maintained root command surface for repository workflows.
+
+Rationale:
+
+- The repository needs one stable non-interactive Rscript entrypoint rather than multiple competing top-level invocation patterns.
+- This matches the intended architecture and makes future workflow additions easier to document and test.
+
+Current effect:
+
+- Maintained workflows are dispatched through entrypoint.R.
+
+## 2026-04-08: Treat drivers/ as the Maintained Workflow Layer
+
+Decision:
+
+- Treat drivers/ as the maintained workflow layer and src/drivers/ as legacy-style wrappers until a later unification step.
+
+Rationale:
+
+- The repository currently has a mixed structure, but the newer extraction and standardization work is happening in drivers/.
+- Forcing an immediate directory reorganization would add churn before the workflow contracts are stable.
+
+Current effect:
+
+- New maintained workflows were added under drivers/.
+- Legacy HTML-oriented wrappers remain in src/drivers/ and are documented as such.
+
+## 2026-04-08: Default Maintained Outputs to Run-Scoped results/ Directories
+
+Decision:
+
+- Maintained workflows should default to run-scoped outputs under results/ rather than legacy Output_* or dated ad hoc locations.
+
+Rationale:
+
+- Reproducibility and provenance are easier to preserve when runs are isolated.
+- This reduces silent overwrites and aligns with the repository’s explicit provenance goal.
+
+Current effect:
+
+- Shared helpers in src/utilities/run_provenance_guardrails.R now generate run-scoped output paths.
+
+## 2026-04-08: Keep Single-Cohort Analysis Separate From Pooled Two-Dataset Workflows
+
+Decision:
+
+- Maintain a separate single-cohort analysis workflow rather than forcing one-dataset use into pooled TCGA plus METABRIC drivers.
+
+Rationale:
+
+- The reusable core can run on one dataset, but the maintained pooled drivers still encode two-dataset assumptions.
+- A separate single-cohort path is cleaner than weakening the meaning of the pooled workflow contract.
+
+Current effect:
+
+- drivers/run_single_cohort_survival.R is the maintained one-dataset analysis path.
+
+## 2026-04-08: Make Subtype Optional in Single-Cohort Analysis Unless Explicitly Required
+
+Decision:
+
+- Treat subtype as optional in the maintained single-cohort workflow unless subtype filtering or subtype-adjusted modeling is requested.
+
+Rationale:
+
+- Subtype is not inherently required by the reusable core.
+- Requiring subtype unconditionally would block valid one-dataset analyses with simpler metadata.
+
+Current effect:
+
+- The single-cohort driver now fails clearly only when subtype-dependent options are requested without a subtype column.
+
+## 2026-04-08: Keep Pooled Reporting and Single-Cohort Reporting as Separate Modes
+
+Decision:
+
+- Do not overload the finalized pooled reporting bundle to handle one-dataset or no-subtype cases.
+- Use a separate maintained single-cohort reporting workflow instead.
+
+Rationale:
+
+- The pooled reporting bundle is semantically tied to two-dataset pooled inputs and subtype-stratified reporting.
+- Separate reporting modes keep the downstream contracts clear and avoid ambiguous behavior.
+
+Current effect:
+
+- drivers/run_finalized_pooled_results_bundle.R now validates and rejects inputs that violate its pooled contract.
+- drivers/run_single_cohort_reporting_bundle.R handles single-cohort downstream reporting.
+
+## 2026-04-08: Standardize One Shared Subgroup-Summary Contract for Downstream Heatmaps
+
+Decision:
+
+- Use a shared subgroup-summary schema for downstream heatmap-style reporting.
+
+Required core columns:
+
+- subgroup
+- subgroup_type
+- feature
+- endpoint
+- comparison
+- HR
+- CI_low
+- CI_high
+- p_value
+- p_value_bh
+
+Rationale:
+
+- Downstream reporting should not depend on driver-specific table names or bespoke column layouts.
+- A shared subgroup contract creates a stable handoff between subgroup-producing workflows and downstream reporting workflows.
+
+Current effect:
+
+- drivers/run_piecewise_subtype_specific.R emits subgroup_effect_summary.csv in the shared shape.
+- drivers/run_single_cohort_reporting_bundle.R consumes and normalizes subgroup tables using that same shape.
+
+## 2026-04-08: Use Synthetic Fixtures for Interface Validation, Not Statistical Validation
+
+Decision:
+
+- Keep small synthetic test_data fixtures for smoke testing interface and contract behavior.
+
+Rationale:
+
+- The immediate goal is validating workflow structure, CLI contracts, and output expectations.
+- Tiny synthetic cohorts are acceptable for smoke testing even when Cox models emit convergence warnings.
+
+Current effect:
+
+- Smoke tests validate dispatch, guardrails, output generation, and subgroup-contract wiring.

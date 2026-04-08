@@ -1,0 +1,11 @@
+sampnames,Diagnosis_Age,ajcc_pathologic_tumor_stage,OS,OS_time,PFI,PFI_time
+TCGA_Basal_01_A,46,Stage III,1,18,1,12
+TCGA_Basal_01_B,49,Stage II,1,24,1,18
+TCGA_Basal_01_C,52,Stage II,0,72,0,60
+TCGA_Basal_01_D,55,Stage III,1,84,1,70
+TCGA_Basal_01_E,58,Stage I,0,96,0,88
+TCGA_Basal_01_F,61,Stage II,1,48,1,36
+TCGA_LumA_01_A,60,Stage I,0,90,0,80
+TCGA_LumA_01_B,63,Stage II,0,110,0,90
+TCGA_LumA_01_C,67,Stage II,1,54,1,40
+TCGA_LumA_01_D,70,Stage I,0,130,0,120
