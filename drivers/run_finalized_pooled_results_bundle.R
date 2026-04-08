@@ -7,6 +7,7 @@ suppressPackageStartupMessages({
   library(rlang)
 })
 
+source("src/utilities/cli_helpers.R")
 source("src/utilities/run_provenance_guardrails.R")
 source("src/utilities/reporting_helpers.R")
 
@@ -23,58 +24,22 @@ cli_defaults <- list(
   exploratory_q_threshold = "0.10"
 )
 
-print_usage <- function(defaults) {
-  cat(
-    paste(
-      "Finalized Pooled Results Bundle Driver",
-      "",
-      "Usage:",
-      "  Rscript drivers/run_finalized_pooled_results_bundle.R [--flag value]...",
-      "  Rscript entrypoint.R finalized-pooled-results-bundle [--flag value]...",
-      "",
-      "Key notes:",
-      "  - This workflow is downstream-only and requires explicit upstream result tables.",
-      "  - It assembles pooled forest plots, subtype heatmaps, and manuscript-style summary artifacts.",
-      "  - The current reporting mode assumes two-dataset pooled inputs and subtype-stratified rows.",
-      "  - subgroup_summary_table uses the shared subgroup-summary contract; subtype_all_features_table is retained as a compatibility alias.",
-      "  - overall_level_label and exploratory_* flags tune the current reporting filters without changing upstream models.",
-      "",
-      "Important flags:",
-      paste(vapply(names(defaults), function(name) {
-        paste0("  --", gsub("_", "-", name), " (default: ", defaults[[name]], ")")
-      }, character(1)), collapse = "\n"),
-      sep = "\n"
+print_usage <- function() {
+  print_standard_cli_help(
+    title = "Finalized Pooled Results Bundle Driver",
+    workflow_name = "finalized-pooled-results-bundle",
+    script_path = file.path("drivers", "run_finalized_pooled_results_bundle.R"),
+    defaults = cli_defaults,
+    summary_lines = c(
+      "This workflow is downstream-only and requires explicit upstream result tables.",
+      "It assembles pooled forest plots, subtype heatmaps, and manuscript-style summary artifacts.",
+      "The current reporting mode assumes two-dataset pooled inputs and subtype-stratified rows.",
+      "subgroup_summary_table uses the shared subgroup-summary contract; subtype_all_features_table is retained as a compatibility alias.",
+      "overall_level_label and exploratory_* flags tune the current reporting filters without changing upstream models."
     ),
-    "\n"
+    required_flags = c("overall_signature_table", "pooled_term_table", "subgroup_summary_table"),
+    aliases = c(subtype_all_features_table = "subgroup_summary_table")
   )
-}
-
-parse_cli <- function(defaults) {
-  args <- commandArgs(trailingOnly = TRUE)
-  if (!length(args) || any(args %in% c("--help", "-h", "help"))) {
-    print_usage(defaults)
-    quit(save = "no", status = 0)
-  }
-  if (!length(args)) {
-    return(defaults)
-  }
-  index <- 1
-  while (index <= length(args)) {
-    key <- args[[index]]
-    if (!startsWith(key, "--")) {
-      stop("Arguments must be supplied as --flag value pairs. Offending token: ", key)
-    }
-    key_clean <- gsub("-", "_", substring(key, 3))
-    if (!key_clean %in% names(defaults)) {
-      stop("Unknown argument: ", key)
-    }
-    if (index == length(args)) {
-      stop("No value supplied for argument ", key)
-    }
-    defaults[[key_clean]] <- args[[index + 1]]
-    index <- index + 2
-  }
-  defaults
 }
 
 resolve_subgroup_summary_input <- function(options) {
@@ -359,7 +324,13 @@ plot_subtype_heatmap_journal <- function(subtype_df, output_stub) {
   ggsave(paste0(output_stub, ".pdf"), heatmap_plot, width = 10.2, height = 6.4)
 }
 
-opt <- parse_cli(cli_defaults)
+opt <- parse_standard_cli_args(
+  defaults = cli_defaults,
+  workflow_name = "finalized-pooled-results-bundle",
+  help_printer = print_usage,
+  required_flags = c("overall_signature_table", "pooled_term_table"),
+  aliases = c(subtype_all_features_table = "subgroup_summary_table")
+)
 allow_legacy <- is_truthy(opt$allow_legacy_output) || is_truthy(Sys.getenv("SURVIVAL_ALLOW_LEGACY_OUTPUT"))
 opt$exploratory_q_threshold <- as.numeric(opt$exploratory_q_threshold)
 
@@ -372,7 +343,7 @@ required_inputs <- c(
 )
 missing_flags <- names(required_inputs)[!nzchar(required_inputs)]
 if (length(missing_flags)) {
-  stop("Missing required input argument(s): ", paste(paste0("--", gsub("_", "-", missing_flags)), collapse = ", "))
+  stop_cli_missing_required(missing_flags, "finalized-pooled-results-bundle")
 }
 missing_inputs <- required_inputs[!file.exists(required_inputs)]
 if (length(missing_inputs)) {

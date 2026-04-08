@@ -7,6 +7,7 @@ suppressPackageStartupMessages({
   library(survival)
 })
 
+source("src/utilities/cli_helpers.R")
 source("src/utilities/run_provenance_guardrails.R")
 
 cli_defaults <- list(
@@ -38,72 +39,47 @@ cli_defaults <- list(
   cut_months = "60"
 )
 
-print_usage <- function(defaults) {
-  cat(
-    paste(
-      "Piecewise Dataset Interaction Driver",
-      "",
-      "Usage:",
-      "  Rscript drivers/run_piecewise_dataset_interaction.R [--flag value]...",
-      "  Rscript entrypoint.R piecewise-dataset-interaction [--flag value]...",
-      "",
-      "Key notes:",
-      "  - This workflow expects two datasets and models dataset interaction terms across TCGA and METABRIC inputs.",
-      "  - Endpoint columns are configurable through the OS/PFI event and time flags.",
-      "  - tcga_primary_filter uses tcga_primary_pattern to subset TCGA sample IDs when enabled.",
-      "",
-      "Important flags:",
-      paste(vapply(names(defaults), function(name) {
-        paste0("  --", gsub("_", "-", name), " (default: ", defaults[[name]], ")")
-      }, character(1)), collapse = "\n"),
-      sep = "\n"
-    ),
-    "\n"
+print_usage <- function() {
+  print_standard_cli_help(
+    title = "Piecewise Dataset Interaction Driver",
+    workflow_name = "piecewise-dataset-interaction",
+    script_path = file.path("drivers", "run_piecewise_dataset_interaction.R"),
+    defaults = cli_defaults,
+    summary_lines = c(
+      "This workflow expects two datasets and models dataset interaction terms across TCGA and METABRIC inputs.",
+      "Endpoint columns are configurable through the OS/PFI event and time flags.",
+      "tcga_primary_filter uses tcga_primary_pattern to subset TCGA sample IDs when enabled."
+    )
   )
 }
 
-parse_cli <- function(defaults) {
-  args <- commandArgs(trailingOnly = TRUE)
-  if (!length(args) || any(args %in% c("--help", "-h", "help"))) {
-    print_usage(defaults)
-    quit(save = "no", status = 0)
-  }
-  if (!length(args)) return(defaults)
-  index <- 1
-  while (index <= length(args)) {
-    key <- args[[index]]
-    if (!startsWith(key, "--")) stop("Arguments must be supplied as --flag value pairs. Offending token: ", key)
-    key_clean <- gsub("-", "_", substring(key, 3))
-    if (!key_clean %in% names(defaults)) stop("Unknown argument: ", key)
-    if (index == length(args)) stop("No value supplied for argument ", key)
-    defaults[[key_clean]] <- args[[index + 1]]
-    index <- index + 2
-  }
-  defaults
-}
-
-opt <- parse_cli(cli_defaults)
-opt$cut_months <- as.numeric(opt$cut_months)
-opt$adjust_covariates <- tolower(opt$adjust_covariates)
-if (!opt$adjust_covariates %in% c("none", "subtype_stage", "subtype_stage_age")) {
-  stop("--adjust-covariates must be one of: none, subtype_stage, subtype_stage_age")
-}
-feature_list <- trimws(unlist(strsplit(opt$features, ",")))
-endpoint_list <- toupper(trimws(unlist(strsplit(opt$endpoints, ","))))
-signature_genes <- trimws(unlist(strsplit(opt$signature_genes, ",")))
+opt <- parse_standard_cli_args(
+  defaults = cli_defaults,
+  workflow_name = "piecewise-dataset-interaction",
+  help_printer = print_usage
+)
+opt$cut_months <- cli_parse_numeric_flag(opt$cut_months, "cut_months")
+opt$adjust_covariates <- cli_parse_enum_flag(
+  value = opt$adjust_covariates,
+  allowed_values = c("none", "subtype_stage", "subtype_stage_age"),
+  flag_name = "adjust_covariates",
+  normalize = "lower"
+)
+feature_list <- cli_parse_csv_list(opt$features)
+endpoint_list <- cli_parse_csv_list(opt$endpoints, uppercase = TRUE)
+signature_genes <- cli_parse_csv_list(opt$signature_genes)
 
 assert_output_guardrails(opt$output_dir)
 
-resolve_endpoint_columns <- function(endpoint_name, options) {
-  endpoint_name <- toupper(endpoint_name)
-  if (endpoint_name == "OS") {
-    return(list(event = options$os_event_column, time = options$os_time_column))
-  }
-  if (endpoint_name == "PFI") {
-    return(list(event = options$pfi_event_column, time = options$pfi_time_column))
-  }
-  stop("Unsupported endpoint: ", endpoint_name)
-}
+cli_assert_existing_input_files(
+  input_paths = c(
+    tcga_expr_file = opt$tcga_expr_file,
+    tcga_meta_file = opt$tcga_meta_file,
+    metabric_expr_file = opt$metabric_expr_file,
+    metabric_meta_file = opt$metabric_meta_file
+  ),
+  workflow_name = "piecewise-dataset-interaction"
+)
 
 parse_time_numeric <- function(x) {
   if (is.numeric(x)) return(x)
@@ -132,18 +108,6 @@ make_clusters <- function(x_num) {
   cluster_values[cluster_values == "C"] <- "High"
   cluster_values[!(cluster_values %in% c("Low", "High"))] <- NA_character_
   factor(cluster_values, levels = c("Low", "High"))
-}
-
-read_expression <- function(path, gene_column) {
-  expression_data <- readr::read_tsv(path, show_col_types = FALSE)
-  if (!gene_column %in% colnames(expression_data)) colnames(expression_data)[1] <- gene_column
-  expression_data
-}
-
-read_metadata <- function(path) {
-  metadata <- readr::read_csv(path, show_col_types = FALSE)
-  colnames(metadata) <- gsub("\\n", "", colnames(metadata))
-  metadata
 }
 
 compute_feature_score <- function(expr, gene_column, sample_ids, feature_name, signature_genes) {
@@ -200,14 +164,14 @@ prepare_dataset <- function(dataset_label, expr, metadata, gene_column, sample_c
   if (!stage_column %in% names(metadata)) stop(dataset_label, " metadata missing stage column: ", stage_column)
   if (!age_column %in% names(metadata)) stop(dataset_label, " metadata missing age column: ", age_column)
 
-  endpoint_columns <- resolve_endpoint_columns(endpoint, options)
+  endpoint_columns <- resolve_standard_endpoint_columns(endpoint, options, "piecewise-dataset-interaction")
   event_column <- endpoint_columns$event
   time_column <- endpoint_columns$time
 
   metadata_filtered <- metadata
   subtype_clean <- tolower(trimws(subtype_filter))
   if (!(subtype_clean %in% c("", "all", "overall", "any"))) {
-    selected_subtypes <- trimws(unlist(strsplit(subtype_filter, ",")))
+    selected_subtypes <- cli_parse_csv_list(subtype_filter)
     metadata_filtered <- metadata_filtered %>% filter(.data[[subtype_column]] %in% selected_subtypes)
   }
 
@@ -343,10 +307,10 @@ if (!dir.exists(file.path(opt$output_dir, "tables"))) dir.create(file.path(opt$o
 if (!dir.exists(file.path(opt$output_dir, "logs"))) dir.create(file.path(opt$output_dir, "logs"))
 
 message("Loading expression and metadata files...")
-tcga_expr <- read_expression(opt$tcga_expr_file, opt$gene_column)
-metabric_expr <- read_expression(opt$metabric_expr_file, opt$gene_column)
-tcga_meta <- read_metadata(opt$tcga_meta_file)
-metabric_meta <- read_metadata(opt$metabric_meta_file)
+tcga_expr <- read_expression_table(opt$tcga_expr_file, opt$gene_column)
+metabric_expr <- read_expression_table(opt$metabric_expr_file, opt$gene_column)
+tcga_meta <- read_metadata_table(opt$tcga_meta_file)
+metabric_meta <- read_metadata_table(opt$metabric_meta_file)
 
 result_rows <- list()
 term_rows <- list()

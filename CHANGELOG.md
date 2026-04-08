@@ -16,6 +16,7 @@
 - Standardized maintained downstream reporting on one shared subgroup-summary contract.
 - Updated the pooled reporting workflow to validate its two-dataset subtype-stratified contract explicitly.
 - Consolidated shared reporting output directory creation, CSV plus Markdown table writing, and text-block writing into shared helpers.
+- Consolidated maintained-driver CLI parsing, help rendering, repeated parser behavior, endpoint mapping, required input-file checks, and maintained analysis-table loading into src/utilities/cli_helpers.R.
 - Updated README and architecture documentation to reflect the maintained versus legacy split, the reporting utility split, and the current validation baselines.
 
 ### Notes

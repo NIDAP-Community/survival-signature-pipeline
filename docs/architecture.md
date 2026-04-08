@@ -24,7 +24,8 @@ The repository currently has one strong reusable core, a small but real utility 
 
 - src/core/GeneExpressionBasedSurvivalAnalys.r contains the main reusable survival-analysis function.
 - src/utilities/run_provenance_guardrails.R contains shared provenance, output, and subgroup-summary interface helpers.
-- src/utilities/reporting_helpers.R contains shared reporting-side subgroup heatmap preparation and minimal common plotting defaults.
+- src/utilities/reporting_helpers.R contains shared reporting-side subgroup heatmap preparation, shared reporting output scaffolding, and minimal common plotting defaults.
+- src/utilities/cli_helpers.R contains the small shared maintained-driver CLI and pre-load utility layer.
 - drivers/ contains the maintained pooled and piecewise workflows.
 - drivers/ now also contains a maintained single-cohort analysis workflow that runs through the reusable core.
 - drivers/ also contains maintained downstream reporting workflows for single-cohort and pooled reporting bundles.
@@ -54,9 +55,23 @@ These helpers are shared infrastructure and should remain independent from analy
 
 ### Reporting utility layer
 
-The reporting utility layer currently lives in src/utilities/reporting_helpers.R. This layer is responsible for narrowly shared downstream reporting helpers, currently limited to subgroup heatmap preparation and a small set of common plotting defaults.
+The reporting utility layer currently lives in src/utilities/reporting_helpers.R. This layer is responsible for narrowly shared downstream reporting helpers, currently limited to subgroup heatmap preparation, shared reporting output scaffolding, and a small set of common plotting defaults.
 
 This layer exists to reduce duplicated reporting code without merging separate reporting workflows or pushing reporting behavior into the core analysis engine.
+
+### Maintained CLI utility layer
+
+The maintained CLI utility layer currently lives in src/utilities/cli_helpers.R. This layer is responsible for narrowly shared pre-analysis and CLI mechanics used by the maintained drivers, including:
+
+- standardized help rendering with entrypoint-first usage
+- shared `--flag value` parsing and required-argument enforcement
+- maintained compatibility alias handling
+- repeated CSV-list, numeric, and enum-style flag parsing
+- shared maintained OS/PFI endpoint mapping
+- minimal required analysis-input file checks
+- shared maintained analysis-table loading for expression and metadata inputs
+
+This layer is intentionally small. It does not replace workflow-specific preparation. Dataset-specific filters, metadata validation, endpoint-column checks inside each workflow, cohort-aware assumptions, and all modeling logic remain local to the individual maintained drivers.
 
 ### Maintained driver and reporting layer
 
@@ -67,6 +82,8 @@ The maintained driver layer is currently the drivers/ directory. These scripts s
 - write to run-scoped directories under results/
 - record metadata through the provenance utility
 - stay focused on workflow execution rather than manuscript text
+
+They now rely on a small shared CLI utility layer for repeated surface-level mechanics, while still retaining workflow-specific semantics and cohort-aware flags where those names carry real meaning.
 
 In the first wave, these drivers remain TCGA and METABRIC aware. The second wave will reduce those assumptions further.
 
@@ -81,6 +98,8 @@ Within drivers/, reporting is still a separate downstream concern:
 - run_finalized_pooled_results_bundle.R is the maintained downstream reporting path for pooled two-dataset outputs
 
 These maintained reporting workflows share some utility code, but they still remain separate workflows with separate reporting scopes, layouts, and outputs.
+
+An intentionally retained inconsistency is the cohort-aware naming in the pooled maintained workflows. Flags such as tcga_expr_file and metabric_meta_file are still explicit because those maintained workflows remain semantically tied to two-dataset TCGA plus METABRIC comparisons.
 
 ### Legacy layer
 
@@ -127,3 +146,5 @@ The repository currently has two concrete validation anchors:
 2. The pooled reporting contract smoke test through entrypoint.R, writing to results/pooled_reporting_contract_smoke_shared_plotting.
 
 Together these validate the maintained single-cohort baseline, run-scoped provenance outputs, and the shared downstream subgroup-summary reporting interface.
+
+The maintained-driver utility cleanup was also checkpointed by rerunning both baselines after the CLI/help, parser, endpoint, file-check, and loader refactors. Those reruns used separate output directories and confirmed that the shared utility extractions did not alter the canonical baseline contracts.

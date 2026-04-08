@@ -7,6 +7,7 @@ suppressPackageStartupMessages({
   library(survival)
 })
 
+source("src/utilities/cli_helpers.R")
 source("src/utilities/run_provenance_guardrails.R")
 
 cli_defaults <- list(
@@ -38,74 +39,49 @@ cli_defaults <- list(
   cut_months = "60"
 )
 
-print_usage <- function(defaults) {
-  cat(
-    paste(
-      "Piecewise Subtype-Specific Driver",
-      "",
-      "Usage:",
-      "  Rscript drivers/run_piecewise_subtype_specific.R [--flag value]...",
-      "  Rscript entrypoint.R piecewise-subtype-specific [--flag value]...",
-      "",
-      "Key notes:",
-      "  - This workflow expects two datasets and runs pooled piecewise models within each subtype value in subtype_list.",
-      "  - subtype_list controls which subtypes are evaluated; both datasets are still required.",
-      "  - adjust_covariates supports none or stage_age in the current maintained version.",
-      "  - It emits subgroup_effect_summary.csv using the shared subgroup-summary contract for downstream heatmaps.",
-      "",
-      "Important flags:",
-      paste(vapply(names(defaults), function(name) {
-        paste0("  --", gsub("_", "-", name), " (default: ", defaults[[name]], ")")
-      }, character(1)), collapse = "\n"),
-      sep = "\n"
-    ),
-    "\n"
+print_usage <- function() {
+  print_standard_cli_help(
+    title = "Piecewise Subtype-Specific Driver",
+    workflow_name = "piecewise-subtype-specific",
+    script_path = file.path("drivers", "run_piecewise_subtype_specific.R"),
+    defaults = cli_defaults,
+    summary_lines = c(
+      "This workflow expects two datasets and runs pooled piecewise models within each subtype value in subtype_list.",
+      "subtype_list controls which subtypes are evaluated; both datasets are still required.",
+      "adjust_covariates supports none or stage_age in the current maintained version.",
+      "It emits subgroup_effect_summary.csv using the shared subgroup-summary contract for downstream heatmaps."
+    )
   )
 }
 
-parse_cli <- function(defaults) {
-  args <- commandArgs(trailingOnly = TRUE)
-  if (!length(args) || any(args %in% c("--help", "-h", "help"))) {
-    print_usage(defaults)
-    quit(save = "no", status = 0)
-  }
-  if (!length(args)) return(defaults)
-  i <- 1
-  while (i <= length(args)) {
-    key <- args[[i]]
-    if (!startsWith(key, "--")) stop("Arguments must be supplied as --flag value pairs. Offending token: ", key)
-    key_clean <- gsub("-", "_", substring(key, 3))
-    if (!key_clean %in% names(defaults)) stop("Unknown argument: ", key)
-    if (i == length(args)) stop("No value supplied for argument ", key)
-    defaults[[key_clean]] <- args[[i + 1]]
-    i <- i + 2
-  }
-  defaults
-}
-
-opt <- parse_cli(cli_defaults)
-opt$adjust_covariates <- tolower(opt$adjust_covariates)
-if (!opt$adjust_covariates %in% c("none", "stage_age")) {
-  stop("--adjust-covariates must be one of: none, stage_age")
-}
-opt$cut_months <- as.numeric(opt$cut_months)
-feature_list <- trimws(unlist(strsplit(opt$features, ",")))
-endpoint_list <- toupper(trimws(unlist(strsplit(opt$endpoints, ","))))
-subtype_list <- trimws(unlist(strsplit(opt$subtype_list, ",")))
-signature_genes <- trimws(unlist(strsplit(opt$signature_genes, ",")))
+opt <- parse_standard_cli_args(
+  defaults = cli_defaults,
+  workflow_name = "piecewise-subtype-specific",
+  help_printer = print_usage
+)
+opt$adjust_covariates <- cli_parse_enum_flag(
+  value = opt$adjust_covariates,
+  allowed_values = c("none", "stage_age"),
+  flag_name = "adjust_covariates",
+  normalize = "lower"
+)
+opt$cut_months <- cli_parse_numeric_flag(opt$cut_months, "cut_months")
+feature_list <- cli_parse_csv_list(opt$features)
+endpoint_list <- cli_parse_csv_list(opt$endpoints, uppercase = TRUE)
+subtype_list <- cli_parse_csv_list(opt$subtype_list)
+signature_genes <- cli_parse_csv_list(opt$signature_genes)
 
 assert_output_guardrails(opt$output_dir)
 
-resolve_endpoint_columns <- function(endpoint_name, options) {
-  endpoint_name <- toupper(endpoint_name)
-  if (endpoint_name == "OS") {
-    return(list(event = options$os_event_column, time = options$os_time_column))
-  }
-  if (endpoint_name == "PFI") {
-    return(list(event = options$pfi_event_column, time = options$pfi_time_column))
-  }
-  stop("Unsupported endpoint: ", endpoint_name)
-}
+cli_assert_existing_input_files(
+  input_paths = c(
+    tcga_expr_file = opt$tcga_expr_file,
+    tcga_meta_file = opt$tcga_meta_file,
+    metabric_expr_file = opt$metabric_expr_file,
+    metabric_meta_file = opt$metabric_meta_file
+  ),
+  workflow_name = "piecewise-subtype-specific"
+)
 
 parse_time_numeric <- function(x) {
   if (is.numeric(x)) return(x)
@@ -148,18 +124,6 @@ harmonize_stage <- function(x) {
   out
 }
 
-read_expression <- function(path, gene_column) {
-  expr <- readr::read_tsv(path, show_col_types = FALSE)
-  if (!gene_column %in% colnames(expr)) colnames(expr)[1] <- gene_column
-  expr
-}
-
-read_metadata <- function(path) {
-  meta <- readr::read_csv(path, show_col_types = FALSE)
-  colnames(meta) <- gsub("\\n", "", colnames(meta))
-  meta
-}
-
 make_clusters <- function(x_num) {
   tertile_1 <- stats::quantile(x_num, 1 / 3, na.rm = TRUE)
   tertile_2 <- stats::quantile(x_num, 2 / 3, na.rm = TRUE)
@@ -200,7 +164,7 @@ prepare_dataset <- function(dataset_label, expr, metadata, gene_column, sample_c
   if (!stage_column %in% names(metadata)) stop(dataset_label, " metadata missing stage column: ", stage_column)
   if (!age_column %in% names(metadata)) stop(dataset_label, " metadata missing age column: ", age_column)
 
-  endpoint_columns <- resolve_endpoint_columns(endpoint, options)
+  endpoint_columns <- resolve_standard_endpoint_columns(endpoint, options, "piecewise-subtype-specific")
   event_column <- endpoint_columns$event
   time_column <- endpoint_columns$time
 
@@ -315,10 +279,10 @@ if (!dir.exists(file.path(opt$output_dir, "tables"))) dir.create(file.path(opt$o
 if (!dir.exists(file.path(opt$output_dir, "logs"))) dir.create(file.path(opt$output_dir, "logs"))
 
 message("Loading expression and metadata files...")
-tcga_expr <- read_expression(opt$tcga_expr_file, opt$gene_column)
-metabric_expr <- read_expression(opt$metabric_expr_file, opt$gene_column)
-tcga_meta <- read_metadata(opt$tcga_meta_file)
-metabric_meta <- read_metadata(opt$metabric_meta_file)
+tcga_expr <- read_expression_table(opt$tcga_expr_file, opt$gene_column)
+metabric_expr <- read_expression_table(opt$metabric_expr_file, opt$gene_column)
+tcga_meta <- read_metadata_table(opt$tcga_meta_file)
+metabric_meta <- read_metadata_table(opt$metabric_meta_file)
 
 summary_rows <- list()
 term_rows <- list()

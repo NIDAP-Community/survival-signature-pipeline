@@ -6,6 +6,7 @@ suppressPackageStartupMessages({
   library(readr)
 })
 
+source("src/utilities/cli_helpers.R")
 source("src/utilities/run_provenance_guardrails.R")
 
 cli_defaults <- list(
@@ -19,51 +20,39 @@ cli_defaults <- list(
   subtype_term_pattern = "^subtype_cov"
 )
 
-print_usage <- function(defaults) {
-  cat(
-    paste(
-      "Signature Consistency Summary Driver",
-      "",
-      "Usage:",
-      "  Rscript drivers/run_signature_consistency_summary.R [--flag value]...",
-      "  Rscript entrypoint.R signature-consistency-summary [--flag value]...",
-      "",
-      "Key notes:",
-      "  - This workflow is downstream-only and requires explicit upstream result tables.",
-      "  - No raw expression or metadata inputs are used here.",
-      "  - signature_feature_name and subtype_term_pattern control which summary rows are extracted.",
-      "",
-      "Important flags:",
-      paste(vapply(names(defaults), function(name) {
-        paste0("  --", gsub("_", "-", name), " (default: ", defaults[[name]], ")")
-      }, character(1)), collapse = "\n"),
-      sep = "\n"
+print_usage <- function() {
+  print_standard_cli_help(
+    title = "Signature Consistency Summary Driver",
+    workflow_name = "signature-consistency-summary",
+    script_path = file.path("drivers", "run_signature_consistency_summary.R"),
+    defaults = cli_defaults,
+    summary_lines = c(
+      "This workflow is downstream-only and requires explicit upstream result tables.",
+      "No raw expression or metadata inputs are used here.",
+      "signature_feature_name and subtype_term_pattern control which summary rows are extracted."
     ),
-    "\n"
+    required_flags = c(
+      "overall_implied_csv",
+      "overall_summary_csv",
+      "subtype_implied_csv",
+      "subtype_summary_csv",
+      "subtype_terms_csv"
+    )
   )
 }
 
-parse_cli <- function(defaults) {
-  args <- commandArgs(trailingOnly = TRUE)
-  if (!length(args) || any(args %in% c("--help", "-h", "help"))) {
-    print_usage(defaults)
-    quit(save = "no", status = 0)
-  }
-  if (!length(args)) return(defaults)
-  i <- 1
-  while (i <= length(args)) {
-    key <- args[[i]]
-    if (!startsWith(key, "--")) stop("Arguments must be supplied as --flag value pairs. Offending token: ", key)
-    key_clean <- gsub("-", "_", substring(key, 3))
-    if (!key_clean %in% names(defaults)) stop("Unknown argument: ", key)
-    if (i == length(args)) stop("No value supplied for argument ", key)
-    defaults[[key_clean]] <- args[[i + 1]]
-    i <- i + 2
-  }
-  defaults
-}
-
-opt <- parse_cli(cli_defaults)
+opt <- parse_standard_cli_args(
+  defaults = cli_defaults,
+  workflow_name = "signature-consistency-summary",
+  help_printer = print_usage,
+  required_flags = c(
+    "overall_implied_csv",
+    "overall_summary_csv",
+    "subtype_implied_csv",
+    "subtype_summary_csv",
+    "subtype_terms_csv"
+  )
+)
 
 assert_output_guardrails(opt$output_dir)
 
@@ -77,7 +66,7 @@ required_inputs <- c(
 
 missing_flags <- names(required_inputs)[!nzchar(required_inputs)]
 if (length(missing_flags)) {
-  stop("Missing required input argument(s): ", paste(paste0("--", gsub("_", "-", missing_flags)), collapse = ", "))
+  stop_cli_missing_required(missing_flags, "signature-consistency-summary")
 }
 
 if (!dir.exists(opt$output_dir)) dir.create(opt$output_dir, recursive = TRUE)

@@ -6,6 +6,7 @@ suppressPackageStartupMessages({
 })
 
 source("src/core/GeneExpressionBasedSurvivalAnalys.r")
+source("src/utilities/cli_helpers.R")
 source("src/utilities/run_provenance_guardrails.R")
 
 cli_defaults <- list(
@@ -38,48 +39,18 @@ cli_defaults <- list(
   verbose = "true"
 )
 
-print_usage <- function(defaults) {
-  cat(
-    paste(
-      "Single-Cohort Survival Driver",
-      "",
-      "Usage:",
-      "  Rscript drivers/run_single_cohort_survival.R [--flag value]...",
-      "  Rscript entrypoint.R single-cohort-survival [--flag value]...",
-      "",
-      "Key notes:",
-      "  - subtype_column is optional unless subtype filtering or subtype-adjusted modeling is requested.",
-      "  - primary_filter=tcga_primary uses primary_pattern to subset sample IDs.",
-      "  - adjust_covariates supports: none, subtype, stage, age, subtype_stage, subtype_age, stage_age, subtype_stage_age.",
-      "",
-      "Important flags:",
-      paste(vapply(names(defaults), function(name) {
-        paste0("  --", gsub("_", "-", name), " (default: ", defaults[[name]], ")")
-      }, character(1)), collapse = "\n"),
-      sep = "\n"
-    ),
-    "\n"
+print_usage <- function() {
+  print_standard_cli_help(
+    title = "Single-Cohort Survival Driver",
+    workflow_name = "single-cohort-survival",
+    script_path = file.path("drivers", "run_single_cohort_survival.R"),
+    defaults = cli_defaults,
+    summary_lines = c(
+      "subtype_column is optional unless subtype filtering or subtype-adjusted modeling is requested.",
+      "primary_filter=tcga_primary uses primary_pattern to subset sample IDs.",
+      "adjust_covariates supports: none, subtype, stage, age, subtype_stage, subtype_age, stage_age, subtype_stage_age."
+    )
   )
-}
-
-parse_cli <- function(defaults) {
-  args <- commandArgs(trailingOnly = TRUE)
-  if (!length(args) || any(args %in% c("--help", "-h", "help"))) {
-    print_usage(defaults)
-    quit(save = "no", status = 0)
-  }
-  if (!length(args)) return(defaults)
-  index <- 1
-  while (index <= length(args)) {
-    key <- args[[index]]
-    if (!startsWith(key, "--")) stop("Arguments must be supplied as --flag value pairs. Offending token: ", key)
-    key_clean <- gsub("-", "_", substring(key, 3))
-    if (!key_clean %in% names(defaults)) stop("Unknown argument: ", key)
-    if (index == length(args)) stop("No value supplied for argument ", key)
-    defaults[[key_clean]] <- args[[index + 1]]
-    index <- index + 2
-  }
-  defaults
 }
 
 is_truthy <- function(value) {
@@ -88,26 +59,7 @@ is_truthy <- function(value) {
 }
 
 resolve_endpoint_columns <- function(endpoint_name, options) {
-  endpoint_name <- toupper(endpoint_name)
-  if (endpoint_name == "OS") {
-    return(list(event = options$os_event_column, time = options$os_time_column))
-  }
-  if (endpoint_name == "PFI") {
-    return(list(event = options$pfi_event_column, time = options$pfi_time_column))
-  }
-  stop("Unsupported endpoint: ", endpoint_name)
-}
-
-read_expression <- function(path, gene_column) {
-  expression_data <- readr::read_tsv(path, show_col_types = FALSE)
-  if (!gene_column %in% colnames(expression_data)) colnames(expression_data)[1] <- gene_column
-  expression_data
-}
-
-read_metadata <- function(path) {
-  metadata <- readr::read_csv(path, show_col_types = FALSE)
-  colnames(metadata) <- gsub("\\n", "", colnames(metadata))
-  metadata
+  resolve_standard_endpoint_columns(endpoint_name, options, "single-cohort-survival")
 }
 
 determine_covariates <- function(mode, subtype_column, stage_column, age_column) {
@@ -153,28 +105,42 @@ build_endpoint_summary <- function(endpoint_name, endpoint_dir, result, feature_
   write_simple_markdown(lines, file.path(endpoint_dir, paste0(endpoint_name, "_summary.md")))
 }
 
-opt <- parse_cli(cli_defaults)
-opt$cut_months <- as.numeric(opt$cut_months)
-feature_list <- trimws(unlist(strsplit(opt$features, ",")))
-endpoint_list <- toupper(trimws(unlist(strsplit(opt$endpoints, ","))))
-signature_genes <- trimws(unlist(strsplit(opt$signature_genes, ",")))
-include_groups <- trimws(unlist(strsplit(opt$include_groups, ",")))
+opt <- parse_standard_cli_args(
+  defaults = cli_defaults,
+  workflow_name = "single-cohort-survival",
+  help_printer = print_usage
+)
+opt$cut_months <- cli_parse_numeric_flag(opt$cut_months, "cut_months")
+opt$adjust_covariates <- cli_parse_enum_flag(
+  value = opt$adjust_covariates,
+  allowed_values = c("none", "subtype", "stage", "age", "subtype_stage", "subtype_age", "stage_age", "subtype_stage_age"),
+  flag_name = "adjust_covariates",
+  normalize = "lower"
+)
+feature_list <- cli_parse_csv_list(opt$features)
+endpoint_list <- cli_parse_csv_list(opt$endpoints, uppercase = TRUE)
+signature_genes <- cli_parse_csv_list(opt$signature_genes)
+include_groups <- cli_parse_csv_list(opt$include_groups, lowercase = TRUE)
 has_signature <- any(tolower(feature_list) == "signature")
 individual_features <- feature_list[tolower(feature_list) != "signature"]
 analysis_genes <- unique(c(individual_features, if (has_signature) signature_genes else character(0)))
 
 assert_output_guardrails(opt$output_dir)
 
-if (!tolower(opt$adjust_covariates) %in% c("none", "subtype", "stage", "age", "subtype_stage", "subtype_age", "stage_age", "subtype_stage_age")) {
-  stop("--adjust-covariates must be one of: none, subtype, stage, age, subtype_stage, subtype_age, stage_age, subtype_stage_age")
-}
-
 if (!length(analysis_genes)) {
   stop("No analyzable genes resolved from --features and --signature-genes.")
 }
 
-expression_data <- read_expression(opt$expr_file, opt$gene_column)
-metadata <- read_metadata(opt$meta_file)
+cli_assert_existing_input_files(
+  input_paths = c(
+    expr_file = opt$expr_file,
+    meta_file = opt$meta_file
+  ),
+  workflow_name = "single-cohort-survival"
+)
+
+expression_data <- read_expression_table(opt$expr_file, opt$gene_column)
+metadata <- read_metadata_table(opt$meta_file)
 
 if (!opt$sample_column %in% names(metadata)) stop("Metadata missing sample column: ", opt$sample_column)
 
@@ -205,7 +171,7 @@ if (tolower(opt$primary_filter) == "tcga_primary") {
 }
 
 if (has_subtype_column && subtype_filter_requested) {
-  selected_subtypes <- trimws(unlist(strsplit(opt$subtype_filter, ",")))
+  selected_subtypes <- cli_parse_csv_list(opt$subtype_filter)
   metadata_filtered <- metadata_filtered %>% filter(.data[[opt$subtype_column]] %in% selected_subtypes)
 }
 

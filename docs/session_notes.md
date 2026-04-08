@@ -18,6 +18,7 @@ This session moved the repository from an architectural assessment into a runnab
 - Added output-path and run-directory helpers to src/utilities/run_provenance_guardrails.R.
 - Added synthetic smoke-test fixtures under test_data/ for interface and contract validation.
 - Parameterized maintained drivers to reduce hard-coded output paths and surface input-column and endpoint assumptions as CLI arguments.
+- Added a small shared maintained-driver CLI utility layer in src/utilities/cli_helpers.R for repeated interface mechanics while keeping workflow-specific preparation local.
 
 ## Maintained Workflow Additions and Guardrails
 
@@ -38,6 +39,15 @@ This session moved the repository from an architectural assessment into a runnab
 - Extracted shared subgroup-summary normalization and validation helpers into src/utilities/run_provenance_guardrails.R.
 - Extracted shared subgroup heatmap preparation and common plotting defaults into src/utilities/reporting_helpers.R.
 - Extracted shared reporting output scaffolding into src/utilities/reporting_helpers.R, including output-directory creation, paired CSV plus Markdown table writing, and small text-block writers.
+
+## Maintained Driver Utility Extractions
+
+- Standardized maintained-driver help text and argument parsing around shared helpers in src/utilities/cli_helpers.R.
+- Centralized repeated CSV-list parsing, numeric flag parsing, and enum-like adjust_covariates validation for the maintained analysis drivers.
+- Centralized the shared maintained OS/PFI endpoint mapping used by the maintained analysis drivers.
+- Centralized the minimal repeated required-file existence checks used before maintained analysis-driver file loading begins.
+- Centralized the duplicated maintained analysis-driver file-loading helpers for expression and metadata tables.
+- Preserved workflow-local responsibility for dataset-specific preparation, metadata validation, endpoint-column checks inside each workflow, and cohort-aware semantics such as tcga_* and metabric_* naming.
 
 ## Standardized Subgroup Summary Contract
 
@@ -75,6 +85,15 @@ This session moved the repository from an architectural assessment into a runnab
 - Smoke-tested single-cohort-reporting-bundle with test_data/single_cohort_subgroup_summary.csv to confirm heatmap generation.
 - Smoke-tested the standardized subgroup-summary producer path from piecewise-subtype-specific and confirmed subgroup_effect_summary.csv was written.
 - Smoke-tested finalized-pooled-results-bundle against the shared subgroup-summary contract and confirmed the pooled summary outputs were preserved after utility extraction.
+- Re-ran the canonical single-cohort smoke path after the maintained-driver CLI/help refactor.
+- Re-ran the pooled reporting contract smoke path after the maintained-driver CLI/help refactor.
+- Re-ran the canonical single-cohort smoke path after centralized list and enum parsing extraction.
+- Re-ran the pooled reporting contract smoke path after centralized list and enum parsing extraction.
+- Re-ran the canonical single-cohort smoke path after centralized endpoint mapping and minimal input-file check extraction.
+- Re-ran the pooled reporting contract smoke path after centralized endpoint mapping and minimal input-file check extraction.
+- Re-ran the canonical single-cohort smoke path after centralized expression and metadata loader extraction.
+- Re-ran the pooled reporting contract smoke path after centralized expression and metadata loader extraction.
+- Spot-checked direct maintained driver execution after the maintained utility extractions for both piecewise-subtype-specific and piecewise-dataset-interaction.
 
 ## Documentation and Repo Hygiene
 
@@ -91,6 +110,19 @@ This session moved the repository from an architectural assessment into a runnab
 - src/drivers/ still contains legacy wrappers and has not yet been unified with drivers/.
 - Synthetic smoke-test data remain suitable for interface validation only and still trigger expected Cox-model warnings in some tiny strata.
 
+## Intentionally Retained Inconsistencies
+
+- The pooled maintained workflows still use tcga_* and metabric_* flag names because those workflows remain semantically cohort-aware two-dataset modes.
+- Reporting workflows and analysis workflows do not share one fully uniform input surface, because their contracts are intentionally different.
+- Some workflow-specific endpoint-column presence checks remain local even though the maintained OS/PFI mapping is now shared.
+
 ## Natural Next Step
 
-- If more refactoring is needed, the next smallest safe step is one more narrow reporting-layer extraction from the remaining forest-summary shaping code without changing workflow boundaries.
+- After the maintained-driver utility cleanup, the next smallest safe step is probably documentation and commit hygiene rather than more utility extraction unless a very small, clearly repeated pre-analysis helper remains.
+
+## Final Checkpoint
+
+- Completed maintained-driver CLI and help standardization.
+- Consolidated shared parsing, endpoint mapping, required-file checks, and maintained analysis-table loaders in src/utilities/cli_helpers.R.
+- Aligned docs and examples to the entrypoint-first interface.
+- Re-ran the maintained single-cohort and pooled reporting smoke baselines successfully after the utility extractions.

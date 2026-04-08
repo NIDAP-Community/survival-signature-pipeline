@@ -6,13 +6,14 @@ suppressPackageStartupMessages({
   library(ggplot2)
 })
 
+source("src/utilities/cli_helpers.R")
 source("src/utilities/run_provenance_guardrails.R")
 source("src/utilities/reporting_helpers.R")
 
 cli_defaults <- list(
   input_run_dir = "",
   output_dir = default_run_output_dir("single_cohort_reporting_bundle"),
-  subgroup_summary_csv = "",
+  subgroup_summary_table = "",
   subgroup_column = "subgroup",
   subgroup_type_column = "subgroup_type",
   feature_column = "feature",
@@ -25,48 +26,21 @@ cli_defaults <- list(
   p_value_bh_column = "p_value_bh"
 )
 
-print_usage <- function(defaults) {
-  cat(
-    paste(
-      "Single-Cohort Reporting Bundle Driver",
-      "",
-      "Usage:",
-      "  Rscript drivers/run_single_cohort_reporting_bundle.R [--flag value]...",
-      "  Rscript entrypoint.R single-cohort-reporting-bundle [--flag value]...",
-      "",
-      "Key notes:",
-      "  - This workflow is downstream-only and expects a prior single-cohort run directory with run_manifest.csv and endpoint RDS outputs.",
-      "  - It always builds an overall forest-style summary from available endpoint result objects.",
-      "  - It only builds a heatmap when subgroup_summary_csv is provided with explicit subgroup rows.",
-      "  - The shared subgroup-summary contract uses subgroup, subgroup_type, feature, endpoint, comparison, HR, CI_low, CI_high, p_value, and p_value_bh.",
-      "",
-      "Important flags:",
-      paste(vapply(names(defaults), function(name) {
-        paste0("  --", gsub("_", "-", name), " (default: ", defaults[[name]], ")")
-      }, character(1)), collapse = "\n"),
-      sep = "\n"
+print_usage <- function() {
+  print_standard_cli_help(
+    title = "Single-Cohort Reporting Bundle Driver",
+    workflow_name = "single-cohort-reporting-bundle",
+    script_path = file.path("drivers", "run_single_cohort_reporting_bundle.R"),
+    defaults = cli_defaults,
+    summary_lines = c(
+      "This workflow is downstream-only and expects a prior single-cohort run directory with run_manifest.csv and endpoint RDS outputs.",
+      "It always builds an overall forest-style summary from available endpoint result objects.",
+      "It only builds a heatmap when subgroup_summary_table is provided with explicit subgroup rows.",
+      "The shared subgroup-summary contract uses subgroup, subgroup_type, feature, endpoint, comparison, HR, CI_low, CI_high, p_value, and p_value_bh."
     ),
-    "\n"
+    required_flags = c("input_run_dir"),
+    aliases = c(subgroup_summary_csv = "subgroup_summary_table")
   )
-}
-
-parse_cli <- function(defaults) {
-  args <- commandArgs(trailingOnly = TRUE)
-  if (!length(args) || any(args %in% c("--help", "-h", "help"))) {
-    print_usage(defaults)
-    quit(save = "no", status = 0)
-  }
-  index <- 1
-  while (index <= length(args)) {
-    key <- args[[index]]
-    if (!startsWith(key, "--")) stop("Arguments must be supplied as --flag value pairs. Offending token: ", key)
-    key_clean <- gsub("-", "_", substring(key, 3))
-    if (!key_clean %in% names(defaults)) stop("Unknown argument: ", key)
-    if (index == length(args)) stop("No value supplied for argument ", key)
-    defaults[[key_clean]] <- args[[index + 1]]
-    index <- index + 2
-  }
-  defaults
 }
 
 fmt_num <- function(x, digits = 3) {
@@ -200,11 +174,13 @@ build_subgroup_heatmap <- function(subgroup_df, output_stub, subgroup_column, fe
   ggsave(paste0(output_stub, ".pdf"), heatmap_plot, width = 10, height = 6)
 }
 
-opt <- parse_cli(cli_defaults)
-
-if (!nzchar(opt$input_run_dir)) {
-  stop("Missing required input argument: --input-run-dir")
-}
+opt <- parse_standard_cli_args(
+  defaults = cli_defaults,
+  workflow_name = "single-cohort-reporting-bundle",
+  help_printer = print_usage,
+  required_flags = c("input_run_dir"),
+  aliases = c(subgroup_summary_csv = "subgroup_summary_table")
+)
 
 assert_output_guardrails(opt$output_dir)
 
@@ -266,11 +242,11 @@ build_overall_forest(forest_df, file.path(opt$output_dir, "figures", "figure1_si
 
 notes <- character(0)
 
-if (nzchar(opt$subgroup_summary_csv)) {
-  if (!file.exists(opt$subgroup_summary_csv)) {
-    stop("subgroup_summary_csv does not exist: ", opt$subgroup_summary_csv)
+if (nzchar(opt$subgroup_summary_table)) {
+  if (!file.exists(opt$subgroup_summary_table)) {
+    stop("subgroup_summary_table does not exist: ", opt$subgroup_summary_table)
   }
-  subgroup_df <- readr::read_csv(opt$subgroup_summary_csv, show_col_types = FALSE)
+  subgroup_df <- readr::read_csv(opt$subgroup_summary_table, show_col_types = FALSE)
   normalized_subgroup_df <- normalize_subgroup_summary_table(
     subgroup_df = subgroup_df,
     subgroup_column = opt$subgroup_column,
@@ -286,7 +262,7 @@ if (nzchar(opt$subgroup_summary_csv)) {
   )
   validate_subgroup_summary_table(
     subgroup_df = normalized_subgroup_df,
-    context_label = "subgroup_summary_csv"
+    context_label = "subgroup_summary_table"
   )
   readr::write_csv(normalized_subgroup_df, file.path(opt$output_dir, "tables", "consumed_subgroup_summary.csv"))
   build_subgroup_heatmap(
@@ -302,6 +278,7 @@ if (nzchar(opt$subgroup_summary_csv)) {
   )
 } else {
   notes <- c(notes, "No subgroup_summary_csv was provided, so the subgroup heatmap was intentionally skipped.")
+  notes <- sub("subgroup_summary_csv", "subgroup_summary_table", notes, fixed = TRUE)
   write_reporting_text_block(
     lines = c(
       "# Heatmap Skipped",
@@ -319,7 +296,7 @@ write_run_metadata_guardrail(
   driver = "drivers/run_single_cohort_reporting_bundle.R",
   inputs = list(
     input_run_dir = opt$input_run_dir,
-    subgroup_summary_csv = if (nzchar(opt$subgroup_summary_csv)) opt$subgroup_summary_csv else ""
+    subgroup_summary_table = if (nzchar(opt$subgroup_summary_table)) opt$subgroup_summary_table else ""
   ),
   parameters = as.list(opt),
   notes = notes,

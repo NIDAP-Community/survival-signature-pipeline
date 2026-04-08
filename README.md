@@ -7,6 +7,7 @@ The current state is mixed:
 - the main reusable analysis code lives in src/core/
 - shared provenance utilities live in src/utilities/
 - shared reporting utilities also now live in src/utilities/
+- shared maintained-driver CLI utilities now also live in src/utilities/
 - newer pooled and piecewise drivers live in drivers/
 - older HTML-oriented drivers still live in src/drivers/
 - the root entrypoint now dispatches maintained workflows
@@ -74,6 +75,20 @@ src/utilities/run_provenance_guardrails.R provides output-path guardrails, run m
 
 src/utilities/reporting_helpers.R provides shared reporting-side helpers for subgroup heatmap preparation and common plotting defaults. These helpers reduce duplicated downstream reporting code, but they do not merge the reporting workflows or change the subgroup-summary contract.
 
+### Maintained CLI utility layer
+
+src/utilities/cli_helpers.R provides the small shared utility layer used by the maintained drivers before workflow-specific preparation begins. It currently centralizes:
+
+- standardized help rendering and argument parsing
+- required-argument enforcement and workflow-aware CLI error messages
+- compatibility alias handling for maintained flags
+- comma-separated list parsing and repeated enum-like flag validation
+- maintained OS/PFI endpoint mapping
+- minimal required input-file existence checks for maintained analysis drivers
+- maintained analysis-table loading for expression and metadata inputs
+
+It does not centralize dataset-specific filtering, metadata validation, endpoint-column checks inside each workflow, cohort assumptions, or modeling logic.
+
 ### Maintained driver layer
 
 The drivers/ directory contains newer command-line scripts for pooled and piecewise modeling:
@@ -88,6 +103,8 @@ The drivers/ directory contains newer command-line scripts for pooled and piecew
 These scripts are non-interactive and executable with Rscript. The pooled drivers are still tied to TCGA and METABRIC defaults, while the single-cohort analysis and reporting drivers are intended for one dataset at a time.
 
 They now share a common execution path through entrypoint.R and default to run-scoped output directories under results/.
+
+They also now share a small maintained-driver utility layer in src/utilities/cli_helpers.R for repeated CLI, endpoint, file-check, and loader mechanics. The workflows themselves still own their cohort-specific semantics.
 
 The maintained reporting workflows still remain separate:
 
@@ -151,6 +168,8 @@ The repository is intended to become reusable, but several current scripts still
 - newer pooled drivers currently default to TCGA plus METABRIC inputs
 - older src/drivers/ scripts are BRCA-focused and assume BRCA subtype labels
 - several scripts assume a TCGA primary-tumor filter based on sample IDs containing _01
+
+These cohort-aware assumptions are intentionally still visible in maintained flag names such as tcga_expr_file, metabric_expr_file, tcga_stage_column, and metabric_stage_column. They remain explicit because the pooled maintained workflows are still semantically two-dataset TCGA plus METABRIC workflows.
 
 ### Column-name assumptions
 
@@ -224,7 +243,7 @@ Rscript entrypoint.R single-cohort-survival \
 ```bash
 Rscript entrypoint.R single-cohort-reporting-bundle \
   --input-run-dir results/smoke_test_single_cohort \
-  --subgroup-summary-csv test_data/single_cohort_subgroup_summary.csv
+  --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv
 ```
 
 Downstream summary and reporting workflows require explicit upstream result tables:
@@ -274,6 +293,11 @@ Rscript drivers/run_piecewise_subtype_specific.R \
 
 ```bash
 Rscript drivers/run_signature_consistency_summary.R \
+  --overall-implied-csv <path> \
+  --overall-summary-csv <path> \
+  --subtype-implied-csv <path> \
+  --subtype-summary-csv <path> \
+  --subtype-terms-csv <path> \
   --output-dir results/example_signature_consistency
 ```
 
@@ -287,11 +311,14 @@ Rscript drivers/run_single_cohort_survival.R \
 ```bash
 Rscript drivers/run_single_cohort_reporting_bundle.R \
   --input-run-dir results/smoke_test_single_cohort \
-  --subgroup-summary-csv test_data/single_cohort_subgroup_summary.csv
+  --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv
 ```
 
 ```bash
 Rscript drivers/run_finalized_pooled_results_bundle.R \
+  --overall-signature-table <path> \
+  --pooled-term-table <path> \
+  --subgroup-summary-table <path> \
   --output-dir results/example_pooled_bundle
 ```
 
@@ -305,6 +332,19 @@ The two current validation anchors in this repository are:
 
 - the canonical single-cohort smoke baseline at results/smoke_test_single_cohort_canonical
 - the pooled reporting contract smoke baseline at results/pooled_reporting_contract_smoke_shared_plotting
+
+After the maintained-driver CLI and utility cleanup work, both baselines were rerun successfully through the root entrypoint during these checkpoint paths as well:
+
+- results/smoke_test_single_cohort_canonical_cli_help
+- results/smoke_test_single_cohort_centralized_parsing
+- results/smoke_test_single_cohort_endpoint_helpers
+- results/smoke_test_single_cohort_loader_helpers
+- results/pooled_reporting_contract_smoke_cli_help
+- results/pooled_reporting_contract_smoke_centralized_parsing
+- results/pooled_reporting_contract_smoke_endpoint_helpers
+- results/pooled_reporting_contract_smoke_loader_helpers
+
+These reruns are checkpoint validations of the maintained driver surface, not new canonical baselines.
 
 The canonical validated smoke test in this repository is:
 

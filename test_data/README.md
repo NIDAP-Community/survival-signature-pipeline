@@ -2,6 +2,8 @@
 
 These files are small synthetic smoke-test inputs for interface validation and workflow checks.
 
+The documented primary interface for these checks is the root entrypoint.
+
 They are intended to help verify that:
 
 - the root entrypoint dispatches correctly
@@ -87,7 +89,7 @@ Single-cohort reporting heatmap smoke test:
 ```bash
 Rscript entrypoint.R single-cohort-reporting-bundle \
   --input-run-dir results/smoke_test_single_cohort \
-  --subgroup-summary-csv test_data/single_cohort_subgroup_summary.csv
+  --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv
 ```
 
 The subgroup-summary fixture uses the shared downstream heatmap contract:

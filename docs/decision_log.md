@@ -198,3 +198,19 @@ Rationale:
 Current effect:
 
 - .Rprofile, renv/, and renv.lock are present and documented as part of the maintained execution path.
+
+## 2026-04-08: Keep Shared Maintained-Driver Utilities Small and Pre-Workflow
+
+Decision:
+
+- Centralize only narrowly repeated maintained-driver mechanics in src/utilities/cli_helpers.R.
+- Keep dataset-specific preparation, metadata validation, endpoint-column checks inside each workflow, cohort-aware semantics, and modeling logic local.
+
+Rationale:
+
+- The maintained drivers benefit from less duplication in CLI parsing and pre-load mechanics, but a broad input abstraction layer would hide workflow-specific contracts too early.
+- Small shared helpers are easier to validate against the canonical smoke baselines.
+
+Current effect:
+
+- src/utilities/cli_helpers.R now holds shared maintained-driver CLI, parsing, endpoint-mapping, required-file-check, and table-loading helpers without changing workflow-specific modeling behavior.

@@ -35,6 +35,7 @@ print_usage <- function() {
 			"Usage:",
 			"  Rscript entrypoint.R list",
 			"  Rscript entrypoint.R <workflow> [workflow arguments]",
+			"  Rscript entrypoint.R <workflow> --help",
 			"",
 			"Available workflows:",
 			paste(vapply(names(workflow_specs), function(name) {
@@ -45,9 +46,9 @@ print_usage <- function() {
 			"  Rscript entrypoint.R piecewise-dataset-interaction --output-dir results/example_run",
 			"  Rscript entrypoint.R piecewise-subtype-specific --subtype-list BRCA_Basal --adjust-covariates none",
 			"  Rscript entrypoint.R single-cohort-survival --expr-file test_data/tcga_expression.tsv --meta-file test_data/tcga_metadata.csv --endpoints OS",
-			"  Rscript entrypoint.R single-cohort-reporting-bundle --input-run-dir results/smoke_test_single_cohort",
+			"  Rscript entrypoint.R single-cohort-reporting-bundle --input-run-dir results/smoke_test_single_cohort --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv",
 			"  Rscript entrypoint.R signature-consistency-summary --overall-implied-csv <path> --overall-summary-csv <path> --subtype-implied-csv <path> --subtype-summary-csv <path> --subtype-terms-csv <path>",
-			"  Rscript entrypoint.R finalized-pooled-results-bundle --overall-signature-table <path> --pooled-term-table <path> --subtype-all-features-table <path>",
+			"  Rscript entrypoint.R finalized-pooled-results-bundle --overall-signature-table <path> --pooled-term-table <path> --subgroup-summary-table <path>",
 			sep = "\n"
 		),
 		"\n"
