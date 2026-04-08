@@ -136,3 +136,65 @@ Rationale:
 Current effect:
 
 - Smoke tests validate dispatch, guardrails, output generation, and subgroup-contract wiring.
+
+## 2026-04-08: Standardize Both Maintained Reporting Workflows on One Shared Subgroup-Summary Contract
+
+Decision:
+
+- Use one shared downstream subgroup-summary contract for both maintained reporting workflows.
+- Keep the pooled reporting workflow's legacy subgroup-table flag only as a compatibility alias.
+
+Rationale:
+
+- Downstream reporting should not depend on workflow-specific subgroup table names or bespoke column layouts.
+- One normalized contract makes subgroup-producing workflows and reporting consumers easier to validate and document.
+
+Current effect:
+
+- drivers/run_single_cohort_reporting_bundle.R and drivers/run_finalized_pooled_results_bundle.R both normalize and validate subgroup inputs through shared helpers.
+
+## 2026-04-08: Add a Small Shared Reporting Utility Layer Instead of Merging Reporting Workflows
+
+Decision:
+
+- Extract only narrowly shared reporting helpers into src/utilities/reporting_helpers.R.
+- Keep single-cohort and pooled reporting as separate maintained workflows.
+
+Rationale:
+
+- The reporting workflows overlap in plotting preparation and output scaffolding, but they still have distinct semantics, layouts, and output scopes.
+- A small utility layer reduces duplication without collapsing separate reporting modes into one ambiguous driver.
+
+Current effect:
+
+- src/utilities/reporting_helpers.R now holds shared subgroup heatmap preparation, common plotting defaults, and shared reporting output helpers.
+
+## 2026-04-08: Keep Reporting CSV Contracts Separate From Markdown Presentation
+
+Decision:
+
+- Preserve raw machine-readable CSV outputs separately from formatted Markdown table outputs when extracting shared reporting writers.
+
+Rationale:
+
+- Reporting refactors should not silently change downstream table contracts.
+- Markdown presentation formatting and CSV data export serve different consumers and should not be conflated.
+
+Current effect:
+
+- Shared reporting table writers accept separate CSV and Markdown data frames where needed so existing output contracts remain intact.
+
+## 2026-04-08: Standardize Project-Local Reproducibility with renv
+
+Decision:
+
+- Check in the renv activation files and lockfile and treat renv as the standard local execution environment.
+
+Rationale:
+
+- The repository should be runnable and reproducible before broader refactoring.
+- A project-local environment makes the maintained workflows easier to validate consistently.
+
+Current effect:
+
+- .Rprofile, renv/, and renv.lock are present and documented as part of the maintained execution path.
