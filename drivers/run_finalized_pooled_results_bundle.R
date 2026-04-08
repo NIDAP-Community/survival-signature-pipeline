@@ -8,11 +8,13 @@ suppressPackageStartupMessages({
 })
 
 source("src/utilities/run_provenance_guardrails.R")
+source("src/utilities/reporting_helpers.R")
 
 cli_defaults <- list(
   output_dir = default_run_output_dir("finalized_pooled_results_bundle"),
   overall_signature_table = "",
   pooled_term_table = "",
+  subgroup_summary_table = "",
   subtype_all_features_table = "",
   allow_legacy_output = "false",
   overall_level_label = "Overall",
@@ -34,6 +36,7 @@ print_usage <- function(defaults) {
       "  - This workflow is downstream-only and requires explicit upstream result tables.",
       "  - It assembles pooled forest plots, subtype heatmaps, and manuscript-style summary artifacts.",
       "  - The current reporting mode assumes two-dataset pooled inputs and subtype-stratified rows.",
+      "  - subgroup_summary_table uses the shared subgroup-summary contract; subtype_all_features_table is retained as a compatibility alias.",
       "  - overall_level_label and exploratory_* flags tune the current reporting filters without changing upstream models.",
       "",
       "Important flags:",
@@ -57,44 +60,6 @@ parse_cli <- function(defaults) {
   }
   index <- 1
   while (index <= length(args)) {
-
-    validate_reporting_inputs <- function(signature_df, pooled_terms_df, subtype_df) {
-      required_signature_columns <- c("level", "subtype", "endpoint", "dataset", "window", "HR", "CI_low", "CI_high", "p_value", "p_value_bh")
-      required_term_columns <- c("term", "feature", "endpoint", "p_value", "p_value_bh")
-      required_subtype_columns <- c("subtype", "feature", "endpoint", "dataset", "window", "HR", "CI_low", "CI_high", "p_value", "p_value_bh")
-
-      missing_signature_columns <- setdiff(required_signature_columns, names(signature_df))
-      missing_term_columns <- setdiff(required_term_columns, names(pooled_terms_df))
-      missing_subtype_columns <- setdiff(required_subtype_columns, names(subtype_df))
-
-      if (length(missing_signature_columns)) {
-        stop("overall_signature_table is missing required columns: ", paste(missing_signature_columns, collapse = ", "))
-      }
-      if (length(missing_term_columns)) {
-        stop("pooled_term_table is missing required columns: ", paste(missing_term_columns, collapse = ", "))
-      }
-      if (length(missing_subtype_columns)) {
-        stop("subtype_all_features_table is missing required columns: ", paste(missing_subtype_columns, collapse = ", "))
-      }
-
-      signature_dataset_count <- dplyr::n_distinct(stats::na.omit(signature_df$dataset))
-      subtype_dataset_count <- dplyr::n_distinct(stats::na.omit(subtype_df$dataset))
-      non_overall_subtype_count <- dplyr::n_distinct(stats::na.omit(subtype_df$subtype[subtype_df$subtype != "ALL"]))
-
-      if (signature_dataset_count < 2 || subtype_dataset_count < 2) {
-        stop(
-          "The current finalized pooled reporting workflow expects two-dataset pooled inputs. ",
-          "If you only have one dataset, use the single-cohort workflow outputs or add a dedicated single-dataset reporting mode instead of this bundled pooled report."
-        )
-      }
-
-      if (non_overall_subtype_count < 1) {
-        stop(
-          "The current finalized pooled reporting workflow expects subtype-stratified input rows for the heatmap and subtype-oriented forest summaries. ",
-          "If no subtype or other sub-cohort rows are available, this bundled report is not the right reporting mode yet."
-        )
-      }
-    }
     key <- args[[index]]
     if (!startsWith(key, "--")) {
       stop("Arguments must be supplied as --flag value pairs. Offending token: ", key)
@@ -106,12 +71,56 @@ parse_cli <- function(defaults) {
     if (index == length(args)) {
       stop("No value supplied for argument ", key)
     }
-
-    validate_reporting_inputs(signature_df, pooled_terms_df, subtype_df)
     defaults[[key_clean]] <- args[[index + 1]]
     index <- index + 2
   }
   defaults
+}
+
+resolve_subgroup_summary_input <- function(options) {
+  if (nzchar(options$subgroup_summary_table)) return(options$subgroup_summary_table)
+  if (nzchar(options$subtype_all_features_table)) return(options$subtype_all_features_table)
+  ""
+}
+
+validate_reporting_inputs <- function(signature_df, pooled_terms_df, subgroup_df) {
+  required_signature_columns <- c("level", "subtype", "feature", "endpoint", "dataset", "window", "HR", "CI_low", "CI_high", "p_value", "p_value_bh")
+  required_term_columns <- c("term", "feature", "endpoint", "HR", "CI_low", "CI_high", "p_value", "p_value_bh")
+
+  missing_signature_columns <- setdiff(required_signature_columns, names(signature_df))
+  missing_term_columns <- setdiff(required_term_columns, names(pooled_terms_df))
+
+  if (length(missing_signature_columns)) {
+    stop("overall_signature_table is missing required columns: ", paste(missing_signature_columns, collapse = ", "))
+  }
+  if (length(missing_term_columns)) {
+    stop("pooled_term_table is missing required columns: ", paste(missing_term_columns, collapse = ", "))
+  }
+
+  validate_subgroup_summary_table(
+    subgroup_df = subgroup_df,
+    context_label = "subgroup_summary_table",
+    require_dataset_window = TRUE,
+    require_subtype_alias = TRUE
+  )
+
+  signature_dataset_count <- dplyr::n_distinct(stats::na.omit(signature_df$dataset))
+  subgroup_dataset_count <- dplyr::n_distinct(stats::na.omit(subgroup_df$dataset))
+  non_overall_subgroup_count <- dplyr::n_distinct(stats::na.omit(subgroup_df$subtype[subgroup_df$subtype != "ALL"]))
+
+  if (signature_dataset_count < 2 || subgroup_dataset_count < 2) {
+    stop(
+      "The current finalized pooled reporting workflow expects two-dataset pooled inputs. ",
+      "If you only have one dataset, use the single-cohort workflow outputs or add a dedicated single-dataset reporting mode instead of this bundled pooled report."
+    )
+  }
+
+  if (non_overall_subgroup_count < 1) {
+    stop(
+      "The current finalized pooled reporting workflow expects subtype-stratified input rows for the heatmap and subtype-oriented forest summaries. ",
+      "If no subtype or other sub-cohort rows are available, this bundled report is not the right reporting mode yet."
+    )
+  }
 }
 
 is_truthy <- function(value) {
@@ -139,17 +148,6 @@ fmt_ci <- function(low, high) {
 
 clean_subtype <- function(x) {
   ifelse(x == "ALL", "Overall", gsub("^BRCA_", "", x))
-}
-
-write_md_table <- function(df, file_path) {
-  header <- paste0("| ", paste(names(df), collapse = " | "), " |")
-  sep <- paste0("| ", paste(rep("---", ncol(df)), collapse = " | "), " |")
-  rows <- apply(df, 1, function(row) paste0("| ", paste(row, collapse = " | "), " |"))
-  writeLines(c(header, sep, rows), con = file_path)
-}
-
-write_text_block <- function(lines, file_path) {
-  writeLines(lines, con = file_path)
 }
 
 short_panel_label <- function(dataset, window) {
@@ -272,19 +270,28 @@ plot_signature_forest_journal <- function(signature_df, output_stub) {
 }
 
 plot_subtype_heatmap <- function(subtype_df, output_stub) {
-  plot_df <- subtype_df %>%
-    filter(.data$window == "0-60m") %>%
+  plot_df <- prepare_subgroup_heatmap_data(
+    subgroup_df = subtype_df,
+    subgroup_column = "subtype",
+    feature_column = "feature",
+    endpoint_column = "endpoint",
+    hr_column = "HR",
+    p_value_column = "p_value",
+    p_value_bh_column = "p_value_bh",
+    dataset_column = "dataset",
+    subgroup_transform = clean_subtype,
+    subgroup_levels = c("Basal", "Her2", "LumA", "LumB", "Normal"),
+    feature_levels = c("Signature", "AMD1", "SRM", "SAT1", "ODC1"),
+    endpoint_levels = c("OS", "PFI"),
+    dataset_levels = c("TCGA", "METABRIC"),
+    filter_window = "0-60m"
+  ) %>%
     mutate(
-      subtype_label = factor(clean_subtype(.data$subtype), levels = c("Basal", "Her2", "LumA", "LumB", "Normal")),
-      feature = factor(.data$feature, levels = c("Signature", "AMD1", "SRM", "SAT1", "ODC1")),
-      endpoint = factor(.data$endpoint, levels = c("OS", "PFI")),
-      dataset = factor(.data$dataset, levels = c("TCGA", "METABRIC")),
-      log2_hr = log2(.data$HR),
-      nominal_sig = .data$p_value < 0.05,
-      exploratory_sig = .data$p_value_bh < 0.10
+      nominal_sig = .data$significance_label == "p<0.05",
+      exploratory_sig = .data$significance_label %in% c("p<0.05", "q<0.10")
     )
 
-  heatmap_plot <- ggplot(plot_df, aes(x = .data$subtype_label, y = .data$feature, fill = .data$log2_hr)) +
+  heatmap_plot <- ggplot(plot_df, aes(x = .data$subgroup_label, y = .data$feature_label, fill = .data$log2_hr)) +
     geom_tile(color = "white", linewidth = 0.4) +
     geom_point(
       data = plot_df %>% filter(.data$exploratory_sig),
@@ -294,50 +301,40 @@ plot_subtype_heatmap <- function(subtype_df, output_stub) {
       fill = "#f6c85f",
       color = "black"
     ) +
-    facet_grid(dataset ~ endpoint) +
-    scale_fill_gradient2(
-      low = "#2166ac",
-      mid = "#f7f7f7",
-      high = "#b2182b",
-      midpoint = 0,
-      limits = c(-2, 2),
-      oob = scales::squish,
-      name = "log2(HR)"
-    ) +
+    facet_grid(dataset_label ~ endpoint_label) +
+    subgroup_heatmap_fill_scale(low = "#2166ac", high = "#b2182b", limits = c(-2, 2)) +
     labs(
       title = "Subtype-Specific Early Effects Across Features",
       subtitle = "Pooled 0-60 month high vs low contrasts by dataset and endpoint",
       x = NULL,
       y = NULL
     ) +
-    theme_minimal(base_size = 10) +
-    theme(
-      panel.grid = element_blank(),
-      strip.text = element_text(face = "bold"),
-      plot.title = element_text(face = "bold")
-    )
+    subgroup_heatmap_theme(base_size = 10) +
+    theme(plot.title = element_text(face = "bold"))
 
   ggsave(paste0(output_stub, ".png"), heatmap_plot, width = 10.5, height = 6.5, dpi = 300)
   ggsave(paste0(output_stub, ".pdf"), heatmap_plot, width = 10.5, height = 6.5)
 }
 
 plot_subtype_heatmap_journal <- function(subtype_df, output_stub) {
-  plot_df <- subtype_df %>%
-    filter(.data$window == "0-60m") %>%
-    mutate(
-      subtype_label = factor(clean_subtype(.data$subtype), levels = c("Basal", "Her2", "LumA", "LumB", "Normal")),
-      feature = factor(.data$feature, levels = c("Signature", "AMD1", "SRM", "SAT1", "ODC1")),
-      endpoint = factor(.data$endpoint, levels = c("OS", "PFI")),
-      dataset = factor(.data$dataset, levels = c("TCGA", "METABRIC")),
-      log2_hr = log2(.data$HR),
-      significance_label = case_when(
-        .data$p_value_bh < 0.10 ~ "q<0.10",
-        .data$p_value < 0.05 ~ "p<0.05",
-        TRUE ~ "NS"
-      )
-    )
+  plot_df <- prepare_subgroup_heatmap_data(
+    subgroup_df = subtype_df,
+    subgroup_column = "subtype",
+    feature_column = "feature",
+    endpoint_column = "endpoint",
+    hr_column = "HR",
+    p_value_column = "p_value",
+    p_value_bh_column = "p_value_bh",
+    dataset_column = "dataset",
+    subgroup_transform = clean_subtype,
+    subgroup_levels = c("Basal", "Her2", "LumA", "LumB", "Normal"),
+    feature_levels = c("Signature", "AMD1", "SRM", "SAT1", "ODC1"),
+    endpoint_levels = c("OS", "PFI"),
+    dataset_levels = c("TCGA", "METABRIC"),
+    filter_window = "0-60m"
+  )
 
-  heatmap_plot <- ggplot(plot_df, aes(x = .data$subtype_label, y = .data$feature, fill = .data$log2_hr)) +
+  heatmap_plot <- ggplot(plot_df, aes(x = .data$subgroup_label, y = .data$feature_label, fill = .data$log2_hr)) +
     geom_tile(color = "white", linewidth = 0.5) +
     geom_point(
       data = plot_df %>% filter(.data$significance_label != "NS"),
@@ -347,24 +344,15 @@ plot_subtype_heatmap_journal <- function(subtype_df, output_stub) {
       fill = "#ffd166",
       color = "black"
     ) +
-    facet_grid(dataset ~ endpoint) +
+    facet_grid(dataset_label ~ endpoint_label) +
     scale_shape_manual(values = c("p<0.05" = 21, "q<0.10" = 23), name = NULL) +
-    scale_fill_gradient2(
-      low = "#2b6cb0",
-      mid = "#f7f7f7",
-      high = "#b22222",
-      midpoint = 0,
-      limits = c(-2, 2),
-      oob = scales::squish,
-      name = "log2(HR)"
-    ) +
+    subgroup_heatmap_fill_scale(limits = c(-2, 2)) +
     labs(x = NULL, y = NULL) +
-    theme_minimal(base_size = 9, base_family = "serif") +
-    theme(
-      panel.grid = element_blank(),
-      strip.text = element_text(face = "bold"),
-      axis.text.x = element_text(angle = 0, hjust = 0.5),
-      legend.position = "right"
+    subgroup_heatmap_theme(
+      base_size = 9,
+      base_family = "serif",
+      axis_text_x = element_text(angle = 0, hjust = 0.5),
+      legend_position = "right"
     )
 
   ggsave(paste0(output_stub, ".png"), heatmap_plot, width = 10.2, height = 6.4, dpi = 400)
@@ -380,7 +368,7 @@ assert_output_guardrails(opt$output_dir, allow_legacy_output = allow_legacy)
 required_inputs <- c(
   overall_signature_table = opt$overall_signature_table,
   pooled_term_table = opt$pooled_term_table,
-  subtype_all_features_table = opt$subtype_all_features_table
+  subgroup_summary_table = resolve_subgroup_summary_input(opt)
 )
 missing_flags <- names(required_inputs)[!nzchar(required_inputs)]
 if (length(missing_flags)) {
@@ -391,31 +379,37 @@ if (length(missing_inputs)) {
   stop("Missing required input file(s): ", paste(unname(missing_inputs), collapse = ", "))
 }
 
-dir.create(opt$output_dir, recursive = TRUE, showWarnings = FALSE)
-dir.create(file.path(opt$output_dir, "figures"), recursive = TRUE, showWarnings = FALSE)
-dir.create(file.path(opt$output_dir, "tables"), recursive = TRUE, showWarnings = FALSE)
-dir.create(file.path(opt$output_dir, "logs"), recursive = TRUE, showWarnings = FALSE)
+ensure_reporting_output_dirs(opt$output_dir)
 
 signature_df <- readr::read_csv(opt$overall_signature_table, show_col_types = FALSE)
 pooled_terms_df <- readr::read_csv(opt$pooled_term_table, show_col_types = FALSE)
-subtype_df <- readr::read_csv(opt$subtype_all_features_table, show_col_types = FALSE)
+subgroup_summary_path <- resolve_subgroup_summary_input(opt)
+subgroup_input_df <- readr::read_csv(subgroup_summary_path, show_col_types = FALSE)
+subtype_df <- normalize_subgroup_summary_table(
+  subgroup_df = subgroup_input_df,
+  allow_legacy_pooled_columns = TRUE
+)
+
+validate_reporting_inputs(signature_df, pooled_terms_df, subtype_df)
+
+readr::write_csv(subtype_df, file.path(opt$output_dir, "tables", "consumed_subgroup_summary.csv"))
 
 overall_signature_hits <- signature_df %>%
   filter(level == opt$overall_level_label, p_value_bh < 0.05) %>%
   transmute(
-    section = "Overall signature",
-    feature = feature,
-    subtype = clean_subtype(subtype),
-    endpoint = endpoint,
-    dataset = dataset,
-    window = window,
-    comparison = "High vs Low",
+    section = as.character("Overall signature"),
+    feature = as.character(feature),
+    subtype = as.character(clean_subtype(subtype)),
+    endpoint = as.character(endpoint),
+    dataset = as.character(dataset),
+    window = as.character(window),
+    comparison = as.character("High vs Low"),
     HR = round(HR, 3),
-    `95% CI` = fmt_ci(CI_low, CI_high),
-    p = fmt_p(p_value),
-    q = fmt_p(p_value_bh),
-    evidence_tier = "BH-significant",
-    source = basename(opt$overall_signature_table)
+    `95% CI` = as.character(fmt_ci(CI_low, CI_high)),
+    p = as.character(fmt_p(p_value)),
+    q = as.character(fmt_p(p_value_bh)),
+    evidence_tier = as.character("BH-significant"),
+    source = as.character(basename(opt$overall_signature_table))
   )
 
 overall_term_hits <- pooled_terms_df %>%
@@ -442,47 +436,53 @@ overall_term_hits <- pooled_terms_df %>%
     )
   ) %>%
   transmute(
-    section = "Overall pooled term",
-    feature = feature,
-    subtype = subtype,
-    endpoint = endpoint,
-    dataset = dataset,
-    window = window,
-    comparison = comparison,
+    section = as.character("Overall pooled term"),
+    feature = as.character(feature),
+    subtype = as.character(subtype),
+    endpoint = as.character(endpoint),
+    dataset = as.character(dataset),
+    window = as.character(window),
+    comparison = as.character(comparison),
     HR = round(HR, 3),
-    `95% CI` = fmt_ci(CI_low, CI_high),
-    p = fmt_p(p_value),
-    q = fmt_p(p_value_bh),
-    evidence_tier = "BH-significant",
-    source = basename(opt$pooled_term_table)
+    `95% CI` = as.character(fmt_ci(CI_low, CI_high)),
+    p = as.character(fmt_p(p_value)),
+    q = as.character(fmt_p(p_value_bh)),
+    evidence_tier = as.character("BH-significant"),
+    source = as.character(basename(opt$pooled_term_table))
   )
 
 subtype_exploratory_hits <- subtype_df %>%
   filter(dataset == opt$exploratory_dataset, window == opt$exploratory_window, p_value_bh < opt$exploratory_q_threshold) %>%
   transmute(
-    section = "Subtype-specific exploratory",
-    feature = feature,
-    subtype = clean_subtype(subtype),
-    endpoint = endpoint,
-    dataset = dataset,
-    window = window,
-    comparison = "High vs Low",
+    section = as.character("Subtype-specific exploratory"),
+    feature = as.character(feature),
+    subtype = as.character(clean_subtype(subtype)),
+    endpoint = as.character(endpoint),
+    dataset = as.character(dataset),
+    window = as.character(window),
+    comparison = as.character("High vs Low"),
     HR = round(HR, 3),
-    `95% CI` = fmt_ci(CI_low, CI_high),
-    p = fmt_p(p_value),
-    q = fmt_p(p_value_bh),
-    evidence_tier = paste0("Exploratory (q<", formatC(opt$exploratory_q_threshold, format = "f", digits = 2), ")"),
-    source = basename(opt$subtype_all_features_table)
+    `95% CI` = as.character(fmt_ci(CI_low, CI_high)),
+    p = as.character(fmt_p(p_value)),
+    q = as.character(fmt_p(p_value_bh)),
+    evidence_tier = as.character(paste0("Exploratory (q<", formatC(opt$exploratory_q_threshold, format = "f", digits = 2), ")")),
+    source = as.character(basename(subgroup_summary_path))
   )
 
 summary_table <- bind_rows(overall_signature_hits, overall_term_hits, subtype_exploratory_hits)
 
 strict_summary_table <- bind_rows(overall_signature_hits, overall_term_hits)
 
-readr::write_csv(summary_table, file.path(opt$output_dir, "tables", "finalized_pooled_results_summary.csv"))
-write_md_table(summary_table, file.path(opt$output_dir, "tables", "finalized_pooled_results_summary.md"))
-readr::write_csv(strict_summary_table, file.path(opt$output_dir, "tables", "finalized_pooled_results_summary_strict_q05.csv"))
-write_md_table(strict_summary_table, file.path(opt$output_dir, "tables", "finalized_pooled_results_summary_strict_q05.md"))
+write_csv_and_md_table(
+  csv_df = summary_table,
+  csv_path = file.path(opt$output_dir, "tables", "finalized_pooled_results_summary.csv"),
+  md_path = file.path(opt$output_dir, "tables", "finalized_pooled_results_summary.md")
+)
+write_csv_and_md_table(
+  csv_df = strict_summary_table,
+  csv_path = file.path(opt$output_dir, "tables", "finalized_pooled_results_summary_strict_q05.csv"),
+  md_path = file.path(opt$output_dir, "tables", "finalized_pooled_results_summary_strict_q05.md")
+)
 
 plot_signature_forest(
   signature_df = signature_df,
@@ -537,7 +537,7 @@ figure_legends <- c(
   )
 )
 
-writeLines(figure_legends, con = file.path(opt$output_dir, "figure_legends.md"))
+write_reporting_text_block(figure_legends, file.path(opt$output_dir, "figure_legends.md"))
 
 results_section <- c(
   "# Draft Results Section",
@@ -551,7 +551,7 @@ results_section <- c(
   "Overall, these results support the polyamine signature as the most stable pooled prognostic signal, with the clearest evidence arising in METABRIC and with limited support for a reproducible BRCA_Basal-specific pooled effect."
 )
 
-writeLines(results_section, con = file.path(opt$output_dir, "results_section.md"))
+write_reporting_text_block(results_section, file.path(opt$output_dir, "results_section.md"))
 
 manuscript_summary <- c(
   "# Manuscript-Style Summary",
@@ -584,8 +584,8 @@ slide_summary <- c(
   "- BRCA_Basal did not show a reproducible pooled signature or gene effect."
 )
 
-write_text_block(manuscript_summary, file.path(opt$output_dir, "manuscript_summary.md"))
-write_text_block(slide_summary, file.path(opt$output_dir, "slide_summary.md"))
+write_reporting_text_block(manuscript_summary, file.path(opt$output_dir, "manuscript_summary.md"))
+write_reporting_text_block(slide_summary, file.path(opt$output_dir, "slide_summary.md"))
 
 write_run_metadata_guardrail(
   output_dir = opt$output_dir,
@@ -594,7 +594,7 @@ write_run_metadata_guardrail(
   inputs = list(
     overall_signature_table = opt$overall_signature_table,
     pooled_term_table = opt$pooled_term_table,
-    subtype_all_features_table = opt$subtype_all_features_table
+    subgroup_summary_table = subgroup_summary_path
   ),
   parameters = list(
     figure_1 = "signature pooled forest",
@@ -609,8 +609,8 @@ write_run_metadata_guardrail(
     exploratory_q_threshold = opt$exploratory_q_threshold
   ),
   notes = c(
-    "Subtype-specific all-feature pooled results were generated in results/early_drop_diagnostics/2026-03-31_run01_subtype_specific_all_features_stage_age before this bundle was assembled.",
-    "Figure 1 uses the archived signature consistency screen; Figure 2 uses the broader all-feature subtype screen."
+    "Figure 1 uses the archived signature consistency screen.",
+    "Figure 2 consumes the shared subgroup-summary contract, with legacy subtype_all_features_table input still accepted as a compatibility alias."
   ),
   scope = "exploratory"
 )

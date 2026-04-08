@@ -5,12 +5,13 @@ This repository is a reusable extraction of an older R-based survival-analysis w
 The current state is mixed:
 
 - the main reusable analysis code lives in src/core/
-- provenance guardrails live in src/utilities/
+- shared provenance utilities live in src/utilities/
+- shared reporting utilities also now live in src/utilities/
 - newer pooled and piecewise drivers live in drivers/
 - older HTML-oriented drivers still live in src/drivers/
 - the root entrypoint now dispatches maintained workflows
-- test_data/ now contains synthetic smoke-test placeholders
-- renv/ exists, but renv.lock has not been checked in yet
+- test_data/ now includes one canonical single-cohort smoke-test dataset plus additional synthetic fixtures
+- renv/ is active and renv.lock is checked in
 
 This README documents the current repository honestly so cleanup and refactoring can proceed from a clear baseline.
 
@@ -51,12 +52,13 @@ The intended architecture is only partially in place.
 - container/: present but currently empty
 - scripts/: present but currently empty
 - src/core/: present and contains the main reusable survival-analysis function
-- src/drivers/: present, but currently contains older cohort-specific and report-oriented drivers
-- src/utilities/: present and currently contains provenance and output guardrails
-- test_data/: present and contains small synthetic smoke-test placeholders
+- drivers/: present and contains the maintained analysis and reporting workflows
+- src/drivers/: present, but currently contains older cohort-specific and report-oriented wrappers
+- src/utilities/: present and now contains both provenance helpers and reporting-side helpers
+- test_data/: present and contains one canonical smoke-test input pair for the maintained single-cohort workflow plus additional synthetic fixtures
 - results/: present and suitable for run-scoped outputs
 - docs/: present, with architecture documentation started
-- renv.lock: currently missing
+- renv.lock: present
 
 ## Code Layers
 
@@ -64,9 +66,13 @@ The intended architecture is only partially in place.
 
 The reusable analysis engine is in src/core/GeneExpressionBasedSurvivalAnalys.r. It provides the main analyze_survival_expression() function used by the older driver layer. This is the strongest candidate for the long-term reusable core.
 
-### Utility layer
+### Provenance utility layer
 
-src/utilities/run_provenance_guardrails.R provides output-path guardrails and run metadata helpers. It is already aligned with the repository goal of preserving provenance and should remain a shared dependency.
+src/utilities/run_provenance_guardrails.R provides output-path guardrails, run metadata helpers, and the shared subgroup-summary normalization and validation helpers used by reporting workflows.
+
+### Reporting utility layer
+
+src/utilities/reporting_helpers.R provides shared reporting-side helpers for subgroup heatmap preparation and common plotting defaults. These helpers reduce duplicated downstream reporting code, but they do not merge the reporting workflows or change the subgroup-summary contract.
 
 ### Maintained driver layer
 
@@ -83,9 +89,14 @@ These scripts are non-interactive and executable with Rscript. The pooled driver
 
 They now share a common execution path through entrypoint.R and default to run-scoped output directories under results/.
 
-### Legacy and reporting-oriented layer
+The maintained reporting workflows still remain separate:
 
-The src/drivers/ directory contains older drivers that combine analysis with HTML and markdown reporting. They still rely on the reusable core, but they are closer to manuscript-oriented workflow code than to a generalized maintained driver layer.
+- run_single_cohort_reporting_bundle.R handles single-cohort downstream summaries and optional subgroup heatmaps
+- run_finalized_pooled_results_bundle.R handles pooled two-dataset downstream forest plots, subtype heatmaps, and manuscript-style reporting outputs
+
+### Legacy layer
+
+The src/drivers/ directory contains older drivers that combine analysis with HTML and markdown reporting. They still rely on the reusable core, but they are closer to manuscript-oriented workflow code than to the maintained drivers/ layer.
 
 Until the driver layout is unified, treat src/drivers/ as legacy-style workflow wrappers and drivers/ as the more active extraction layer.
 
@@ -175,7 +186,7 @@ Use the maintained workflows according to the analysis shape you need.
 - Use `piecewise-dataset-interaction` when you have two datasets and want pooled piecewise modeling with dataset interaction terms.
 - Use `piecewise-subtype-specific` when you have two datasets and want pooled piecewise modeling within subtype strata. This workflow also emits a standardized subgroup summary table for downstream heatmaps.
 - Use `signature-consistency-summary` when upstream pooled and subtype result tables already exist and you want a compact comparison summary.
-- Use `finalized-pooled-results-bundle` when upstream pooled two-dataset result tables already exist and you want pooled forest plots, subtype heatmaps, and manuscript-style summary artifacts.
+- Use `finalized-pooled-results-bundle` when upstream pooled two-dataset result tables already exist and you want pooled forest plots, subtype heatmaps, and manuscript-style summary artifacts. This reporting workflow now consumes the shared subgroup-summary contract.
 
 ## Execution
 
@@ -246,7 +257,7 @@ Rscript entrypoint.R signature-consistency-summary \
 Rscript entrypoint.R finalized-pooled-results-bundle \
   --overall-signature-table <path> \
   --pooled-term-table <path> \
-  --subtype-all-features-table <path>
+  --subgroup-summary-table <path>
 ```
 
 The maintained driver scripts are also still directly runnable if needed:
@@ -288,9 +299,45 @@ The src/drivers/ scripts are still runnable, but they should be treated as legac
 
 ## Smoke-Test Data
 
-The repository now includes synthetic smoke-test placeholders under test_data/.
+The repository now includes a canonical single-cohort smoke-test dataset under test_data/, plus additional synthetic fixtures for other interface checks.
 
-These files are intended for interface validation, not scientific use. They are useful for checking:
+The two current validation anchors in this repository are:
+
+- the canonical single-cohort smoke baseline at results/smoke_test_single_cohort_canonical
+- the pooled reporting contract smoke baseline at results/pooled_reporting_contract_smoke_shared_plotting
+
+The canonical validated smoke test in this repository is:
+
+```bash
+Rscript entrypoint.R single-cohort-survival \
+  --expr-file test_data/tcga_expression.tsv \
+  --meta-file test_data/tcga_metadata_no_subtype.csv \
+  --features AMD1 \
+  --endpoints OS \
+  --adjust-covariates none \
+  --output-dir results/smoke_test_single_cohort_canonical
+```
+
+That run has already been validated in this repository and writes:
+
+- run_manifest.csv
+- RUN_METADATA.md
+- logs/sessionInfo.txt
+- endpoint outputs such as OS/OS_results.rds, OS/OS_summary.md, and OS/results_univariate.csv
+
+The current pooled reporting contract smoke test is:
+
+```bash
+Rscript entrypoint.R finalized-pooled-results-bundle \
+  --overall-signature-table results/pooled_reporting_contract_smoke_input/overall_signature_table.csv \
+  --pooled-term-table results/pooled_reporting_contract_smoke_input/pooled_term_table.csv \
+  --subgroup-summary-table results/smoke_test_subgroup_contract/tables/subgroup_effect_summary.csv \
+  --output-dir results/pooled_reporting_contract_smoke_shared_plotting
+```
+
+That validation confirms the pooled reporting workflow consumes the same shared subgroup-summary contract used elsewhere.
+
+The test_data/ files are intended for smoke testing and interface validation, not scientific use. They are useful for checking:
 
 - input-column contracts
 - entrypoint dispatch
@@ -311,7 +358,22 @@ The repository currently uses R packages including:
 - stringr
 - glmnet
 
-Package management is not fully standardized yet because renv.lock is currently missing. Restoring a fully reproducible local environment should be treated as an immediate follow-up task.
+This repository now uses renv for a project-local R environment.
+
+On a fresh machine, restore the environment with:
+
+```bash
+Rscript -e 'if (!requireNamespace("renv", quietly = TRUE)) install.packages("renv", repos = "https://cloud.r-project.org")'
+Rscript -e 'renv::restore(prompt = FALSE)'
+```
+
+You can verify the project environment is aligned with:
+
+```bash
+Rscript -e 'renv::status()'
+```
+
+If package restore falls back to source builds, standard system build tools for your platform may still be required.
 
 ## Outputs and Provenance
 

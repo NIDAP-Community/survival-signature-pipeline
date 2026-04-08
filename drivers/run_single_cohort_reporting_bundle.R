@@ -7,6 +7,7 @@ suppressPackageStartupMessages({
 })
 
 source("src/utilities/run_provenance_guardrails.R")
+source("src/utilities/reporting_helpers.R")
 
 cli_defaults <- list(
   input_run_dir = "",
@@ -162,19 +163,16 @@ build_overall_forest <- function(forest_df, output_stub) {
 }
 
 build_subgroup_heatmap <- function(subgroup_df, output_stub, subgroup_column, feature_column, endpoint_column, comparison_column, hr_column, p_value_column, p_value_bh_column) {
-  plot_df <- subgroup_df %>%
-    mutate(
-      subgroup_label = as.character(.data[[subgroup_column]]),
-      feature_label = as.character(.data[[feature_column]]),
-      endpoint_label = as.character(.data[[endpoint_column]]),
-      comparison_label = if (comparison_column %in% names(subgroup_df)) as.character(.data[[comparison_column]]) else "Overall",
-      log2_hr = log2(.data[[hr_column]]),
-      significance_label = case_when(
-        !is.na(.data[[p_value_bh_column]]) & .data[[p_value_bh_column]] < 0.10 ~ "q<0.10",
-        !is.na(.data[[p_value_column]]) & .data[[p_value_column]] < 0.05 ~ "p<0.05",
-        TRUE ~ "NS"
-      )
-    )
+  plot_df <- prepare_subgroup_heatmap_data(
+    subgroup_df = subgroup_df,
+    subgroup_column = subgroup_column,
+    feature_column = feature_column,
+    endpoint_column = endpoint_column,
+    hr_column = hr_column,
+    p_value_column = p_value_column,
+    p_value_bh_column = p_value_bh_column,
+    comparison_column = comparison_column
+  )
 
   heatmap_plot <- ggplot(plot_df, aes(x = .data$subgroup_label, y = .data$feature_label, fill = .data$log2_hr)) +
     geom_tile(color = "white", linewidth = 0.5) +
@@ -188,26 +186,15 @@ build_subgroup_heatmap <- function(subgroup_df, output_stub, subgroup_column, fe
     ) +
     facet_grid(endpoint_label ~ comparison_label) +
     scale_shape_manual(values = c("p<0.05" = 21, "q<0.10" = 23), name = NULL) +
-    scale_fill_gradient2(
-      low = "#2b6cb0",
-      mid = "#f7f7f7",
-      high = "#b22222",
-      midpoint = 0,
-      oob = scales::squish,
-      name = "log2(HR)"
-    ) +
+    subgroup_heatmap_fill_scale() +
     labs(
       title = "Single-Cohort Subgroup Effects",
       subtitle = "Optional subgroup heatmap generated from explicit subgroup summary rows",
       x = NULL,
       y = NULL
     ) +
-    theme_minimal(base_size = 10) +
-    theme(
-      panel.grid = element_blank(),
-      strip.text = element_text(face = "bold"),
-      plot.title = element_text(face = "bold")
-    )
+    subgroup_heatmap_theme(base_size = 10) +
+    theme(plot.title = element_text(face = "bold"))
 
   ggsave(paste0(output_stub, ".png"), heatmap_plot, width = 10, height = 6, dpi = 300)
   ggsave(paste0(output_stub, ".pdf"), heatmap_plot, width = 10, height = 6)
@@ -231,10 +218,7 @@ if (!all(c("endpoint", "endpoint_dir") %in% names(manifest_df))) {
   stop("run_manifest.csv must contain endpoint and endpoint_dir columns.")
 }
 
-dir.create(opt$output_dir, recursive = TRUE, showWarnings = FALSE)
-dir.create(file.path(opt$output_dir, "figures"), recursive = TRUE, showWarnings = FALSE)
-dir.create(file.path(opt$output_dir, "tables"), recursive = TRUE, showWarnings = FALSE)
-dir.create(file.path(opt$output_dir, "logs"), recursive = TRUE, showWarnings = FALSE)
+ensure_reporting_output_dirs(opt$output_dir)
 
 forest_rows <- list()
 
@@ -259,8 +243,6 @@ if (!nrow(forest_df)) {
   stop("No overall effect rows could be extracted from the single-cohort run outputs.")
 }
 
-readr::write_csv(forest_df, file.path(opt$output_dir, "tables", "single_cohort_overall_effects.csv"))
-
 forest_md <- forest_df %>%
   transmute(
     endpoint = endpoint,
@@ -273,13 +255,11 @@ forest_md <- forest_df %>%
     q = fmt_p(q_value)
   )
 
-writeLines(
-  c(
-    "| Endpoint | Feature | Model | Comparison | HR | 95% CI | p | q |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- |",
-    apply(forest_md, 1, function(row) paste0("| ", paste(row, collapse = " | "), " |"))
-  ),
-  con = file.path(opt$output_dir, "tables", "single_cohort_overall_effects.md")
+write_csv_and_md_table(
+  csv_df = forest_df,
+  csv_path = file.path(opt$output_dir, "tables", "single_cohort_overall_effects.csv"),
+  md_path = file.path(opt$output_dir, "tables", "single_cohort_overall_effects.md"),
+  md_df = forest_md
 )
 
 build_overall_forest(forest_df, file.path(opt$output_dir, "figures", "figure1_single_cohort_overall_forest"))
@@ -291,25 +271,23 @@ if (nzchar(opt$subgroup_summary_csv)) {
     stop("subgroup_summary_csv does not exist: ", opt$subgroup_summary_csv)
   }
   subgroup_df <- readr::read_csv(opt$subgroup_summary_csv, show_col_types = FALSE)
-  required_subgroup_columns <- c(opt$subgroup_column, opt$feature_column, opt$endpoint_column, opt$hr_column, opt$ci_low_column, opt$ci_high_column, opt$p_value_column, opt$p_value_bh_column)
-  missing_subgroup_columns <- setdiff(required_subgroup_columns, names(subgroup_df))
-  if (length(missing_subgroup_columns)) {
-    stop("subgroup_summary_csv is missing required columns: ", paste(missing_subgroup_columns, collapse = ", "))
-  }
-  normalized_subgroup_df <- subgroup_df %>%
-    mutate(
-      subgroup = .data[[opt$subgroup_column]],
-      subgroup_type = if (opt$subgroup_type_column %in% names(subgroup_df)) .data[[opt$subgroup_type_column]] else "subgroup",
-      feature = .data[[opt$feature_column]],
-      endpoint = .data[[opt$endpoint_column]],
-      comparison = if (opt$comparison_column %in% names(subgroup_df)) .data[[opt$comparison_column]] else "Overall",
-      HR = .data[[opt$hr_column]],
-      CI_low = .data[[opt$ci_low_column]],
-      CI_high = .data[[opt$ci_high_column]],
-      p_value = .data[[opt$p_value_column]],
-      p_value_bh = .data[[opt$p_value_bh_column]]
-    ) %>%
-    select(subgroup, subgroup_type, feature, endpoint, comparison, HR, CI_low, CI_high, p_value, p_value_bh, everything())
+  normalized_subgroup_df <- normalize_subgroup_summary_table(
+    subgroup_df = subgroup_df,
+    subgroup_column = opt$subgroup_column,
+    subgroup_type_column = opt$subgroup_type_column,
+    feature_column = opt$feature_column,
+    endpoint_column = opt$endpoint_column,
+    comparison_column = opt$comparison_column,
+    hr_column = opt$hr_column,
+    ci_low_column = opt$ci_low_column,
+    ci_high_column = opt$ci_high_column,
+    p_value_column = opt$p_value_column,
+    p_value_bh_column = opt$p_value_bh_column
+  )
+  validate_subgroup_summary_table(
+    subgroup_df = normalized_subgroup_df,
+    context_label = "subgroup_summary_csv"
+  )
   readr::write_csv(normalized_subgroup_df, file.path(opt$output_dir, "tables", "consumed_subgroup_summary.csv"))
   build_subgroup_heatmap(
     normalized_subgroup_df,
@@ -324,14 +302,14 @@ if (nzchar(opt$subgroup_summary_csv)) {
   )
 } else {
   notes <- c(notes, "No subgroup_summary_csv was provided, so the subgroup heatmap was intentionally skipped.")
-  writeLines(
-    c(
+  write_reporting_text_block(
+    lines = c(
       "# Heatmap Skipped",
       "",
       "No subgroup summary table was provided.",
       "The single-cohort reporting bundle therefore generated the overall forest figure only."
     ),
-    con = file.path(opt$output_dir, "figures", "figure2_single_cohort_subgroup_heatmap_skipped.md")
+    file_path = file.path(opt$output_dir, "figures", "figure2_single_cohort_subgroup_heatmap_skipped.md")
   )
 }
 

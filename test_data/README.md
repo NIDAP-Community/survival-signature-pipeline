@@ -1,6 +1,6 @@
-# Smoke-Test Placeholders
+# Smoke-Test Data
 
-These files are small synthetic placeholders for interface validation and smoke testing.
+These files are small synthetic smoke-test inputs for interface validation and workflow checks.
 
 They are intended to help verify that:
 
@@ -10,6 +10,29 @@ They are intended to help verify that:
 - provenance metadata is written
 
 They are not intended for scientific interpretation or for validating the statistical behavior of the models.
+
+## Canonical Maintained Smoke Test
+
+The canonical validated smoke test for this repository currently targets the maintained single-cohort workflow.
+
+Input pair:
+
+- tcga_expression.tsv
+- tcga_metadata_no_subtype.csv
+
+Canonical command:
+
+```bash
+Rscript entrypoint.R single-cohort-survival \
+  --expr-file test_data/tcga_expression.tsv \
+  --meta-file test_data/tcga_metadata_no_subtype.csv \
+  --features AMD1 \
+  --endpoints OS \
+  --adjust-covariates none \
+  --output-dir results/smoke_test_single_cohort_canonical
+```
+
+This command exercises a real maintained workflow through entrypoint.R while also validating that subtype is optional when subtype-dependent options are not requested.
 
 ## Files
 
@@ -22,7 +45,7 @@ They are not intended for scientific interpretation or for validating the statis
 
 ## Example Commands
 
-Overall smoke test:
+Two-dataset interface smoke test:
 
 ```bash
 Rscript entrypoint.R piecewise-dataset-interaction \
@@ -48,7 +71,7 @@ Rscript entrypoint.R piecewise-subtype-specific \
   --endpoints OS
 ```
 
-Single-cohort smoke test:
+Alternative single-cohort smoke test:
 
 ```bash
 Rscript entrypoint.R single-cohort-survival \

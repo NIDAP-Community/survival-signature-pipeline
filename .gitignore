@@ -4,3 +4,5 @@ Rplots.pdf
 .RData
 .Ruserdata
 .DS_Store
+renv/library/
+renv/staging/
