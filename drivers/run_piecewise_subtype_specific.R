@@ -16,6 +16,8 @@ cli_defaults <- list(
   dataset1_meta_file = file.path("test_data", "tcga_metadata.csv"),
   dataset2_expr_file = file.path("test_data", "metabric_expression.tsv"),
   dataset2_meta_file = file.path("test_data", "metabric_metadata.csv"),
+  dataset1_label = "Dataset1",
+  dataset2_label = "Dataset2",
   dataset1_sample_column = "sampnames",
   dataset2_sample_column = "sampnames",
   dataset1_subtype_column = "Subtype",
@@ -30,8 +32,6 @@ cli_defaults <- list(
   os_time_column = "OS_time",
   pfi_event_column = "PFI",
   pfi_time_column = "PFI_time",
-  dataset1_primary_pattern = "_01",
-  dataset1_primary_filter = "tcga_primary",
   features = "Signature",
   endpoints = "OS,PFI",
   subtype_list = "BRCA_Basal,BRCA_Her2,BRCA_LumA,BRCA_LumB,BRCA_Normal",
@@ -49,6 +49,8 @@ print_usage <- function() {
       "This workflow expects two datasets and runs pooled piecewise models within each subtype value in subtype_list.",
       "subtype_list controls which subtypes are evaluated; both datasets are still required.",
       "adjust_covariates supports none or stage_age in the current maintained version.",
+      "Inputs are expected to be post-filtered upstream; the maintained driver does not apply an internal primary-only sample filter.",
+      "dataset1_label and dataset2_label control the dataset titles written into pooled outputs.",
       "It emits subgroup_effect_summary.csv using the shared subgroup-summary contract for downstream heatmaps."
     ),
     aliases = c(
@@ -63,9 +65,7 @@ print_usage <- function() {
       tcga_stage_column = "dataset1_stage_column",
       metabric_stage_column = "dataset2_stage_column",
       tcga_age_column = "dataset1_age_column",
-      metabric_age_column = "dataset2_age_column",
-      tcga_primary_pattern = "dataset1_primary_pattern",
-      tcga_primary_filter = "dataset1_primary_filter"
+      metabric_age_column = "dataset2_age_column"
     )
   )
 }
@@ -86,9 +86,7 @@ opt <- parse_standard_cli_args(
     tcga_stage_column = "dataset1_stage_column",
     metabric_stage_column = "dataset2_stage_column",
     tcga_age_column = "dataset1_age_column",
-    metabric_age_column = "dataset2_age_column",
-    tcga_primary_pattern = "dataset1_primary_pattern",
-    tcga_primary_filter = "dataset1_primary_filter"
+    metabric_age_column = "dataset2_age_column"
   )
 )
 opt$adjust_covariates <- cli_parse_enum_flag(
@@ -102,6 +100,13 @@ feature_list <- cli_parse_csv_list(opt$features)
 endpoint_list <- cli_parse_csv_list(opt$endpoints, uppercase = TRUE)
 subtype_list <- cli_parse_csv_list(opt$subtype_list)
 signature_genes <- cli_parse_csv_list(opt$signature_genes)
+
+if (!nzchar(opt$dataset1_label) || !nzchar(opt$dataset2_label)) {
+  stop("--dataset1-label and --dataset2-label must both be non-empty.")
+}
+if (identical(opt$dataset1_label, opt$dataset2_label)) {
+  stop("--dataset1-label and --dataset2-label must be distinct.")
+}
 
 assert_output_guardrails(opt$output_dir)
 
@@ -190,7 +195,7 @@ compute_feature_score <- function(expr, gene_column, sample_ids, feature_name, s
   as.numeric(scale(value_vector))
 }
 
-prepare_dataset <- function(dataset_label, expr, metadata, gene_column, sample_column, subtype_column, stage_column, age_column, endpoint, primary_filter, primary_pattern, feature_name, subtype_value, signature_genes, options) {
+prepare_dataset <- function(dataset_label, expr, metadata, gene_column, sample_column, subtype_column, stage_column, age_column, endpoint, feature_name, subtype_value, signature_genes, options) {
   if (!sample_column %in% names(metadata)) stop(dataset_label, " metadata missing sample column: ", sample_column)
   if (!subtype_column %in% names(metadata)) stop(dataset_label, " metadata missing subtype column: ", subtype_column)
   if (!stage_column %in% names(metadata)) stop(dataset_label, " metadata missing stage column: ", stage_column)
@@ -201,9 +206,6 @@ prepare_dataset <- function(dataset_label, expr, metadata, gene_column, sample_c
   time_column <- endpoint_columns$time
 
   meta_filtered <- metadata %>% filter(.data[[subtype_column]] == subtype_value)
-  if (identical(primary_filter, "tcga_primary")) {
-    meta_filtered <- meta_filtered %>% filter(grepl(primary_pattern, .data[[sample_column]]))
-  }
 
   if (!all(c(event_column, time_column) %in% names(meta_filtered))) {
     stop("Missing endpoint columns in ", dataset_label, ": ", event_column, ", ", time_column)
@@ -306,6 +308,21 @@ extract_lrt_p <- function(anova_result) {
   as.numeric(anova_result[nrow(anova_result), p_column[1]])
 }
 
+resolve_dataset_interaction_terms <- function(fit) {
+  coefficient_names <- names(stats::coef(fit))
+  early_term <- grep("^group_high:dataset[^:]+$", coefficient_names, value = TRUE)
+  late_term <- grep("^group_high:dataset[^:]+:post60$|^group_high:post60:dataset[^:]+$", coefficient_names, value = TRUE)
+
+  if (length(early_term) > 1 || length(late_term) > 1) {
+    stop("Unable to resolve unique dataset interaction terms from fitted model coefficients.")
+  }
+
+  list(
+    early = if (length(early_term)) early_term[[1]] else NA_character_,
+    late = if (length(late_term)) late_term[[1]] else NA_character_
+  )
+}
+
 if (!dir.exists(opt$output_dir)) dir.create(opt$output_dir, recursive = TRUE)
 if (!dir.exists(file.path(opt$output_dir, "tables"))) dir.create(file.path(opt$output_dir, "tables"))
 if (!dir.exists(file.path(opt$output_dir, "logs"))) dir.create(file.path(opt$output_dir, "logs"))
@@ -326,7 +343,7 @@ for (feature_name in feature_list) {
       message("Fitting subtype-specific model for ", feature_name, " (", endpoint_name, ", ", subtype_value, ")")
 
       dataset1_df <- prepare_dataset(
-        dataset_label = "TCGA",
+        dataset_label = opt$dataset1_label,
         expr = dataset1_expr,
         metadata = dataset1_meta,
         gene_column = opt$gene_column,
@@ -335,8 +352,6 @@ for (feature_name in feature_list) {
         stage_column = opt$dataset1_stage_column,
         age_column = opt$dataset1_age_column,
         endpoint = endpoint_name,
-        primary_filter = opt$dataset1_primary_filter,
-        primary_pattern = opt$dataset1_primary_pattern,
         feature_name = feature_name,
         subtype_value = subtype_value,
         signature_genes = signature_genes,
@@ -344,7 +359,7 @@ for (feature_name in feature_list) {
       )
 
       dataset2_df <- prepare_dataset(
-        dataset_label = "METABRIC",
+        dataset_label = opt$dataset2_label,
         expr = dataset2_expr,
         metadata = dataset2_meta,
         gene_column = opt$gene_column,
@@ -353,8 +368,6 @@ for (feature_name in feature_list) {
         stage_column = opt$dataset2_stage_column,
         age_column = opt$dataset2_age_column,
         endpoint = endpoint_name,
-        primary_filter = "none",
-        primary_pattern = opt$dataset1_primary_pattern,
         feature_name = feature_name,
         subtype_value = subtype_value,
         signature_genes = signature_genes,
@@ -364,7 +377,7 @@ for (feature_name in feature_list) {
       if (is.null(dataset1_df) || is.null(dataset2_df)) next
 
       combined_df <- bind_rows(dataset1_df, dataset2_df)
-      combined_df$dataset <- factor(combined_df$dataset, levels = c("TCGA", "METABRIC"))
+  combined_df$dataset <- factor(combined_df$dataset, levels = c(opt$dataset1_label, opt$dataset2_label))
       if (nlevels(droplevels(combined_df$dataset)) < 2) next
 
       early_df <- combined_df %>%
@@ -431,6 +444,7 @@ for (feature_name in feature_list) {
 
       lrt_dataset <- anova(fit_no_dataset_interaction, fit_full, test = "LRT")
       lrt_threeway <- anova(fit_no_threeway, fit_full, test = "LRT")
+      dataset_terms <- resolve_dataset_interaction_terms(fit_full)
 
       summary_rows[[length(summary_rows) + 1]] <- data.frame(
         subtype = subtype_value,
@@ -439,24 +453,24 @@ for (feature_name in feature_list) {
         covariates = opt$adjust_covariates,
         model_rows = nrow(split_df),
         model_events = sum(split_df$event == 1, na.rm = TRUE),
-        p_dataset_interaction_early = extract_term(fit_full, "group_high:datasetMETABRIC")$p_value,
-        p_dataset_late_shift_interaction = extract_term(fit_full, "group_high:datasetMETABRIC:post60")$p_value,
+        p_dataset_interaction_early = extract_term(fit_full, dataset_terms$early)$p_value,
+        p_dataset_late_shift_interaction = extract_term(fit_full, dataset_terms$late)$p_value,
         lrt_dataset_interaction_p = extract_lrt_p(lrt_dataset),
         lrt_threeway_p = extract_lrt_p(lrt_threeway)
       )
 
       term_rows[[length(term_rows) + 1]] <- bind_rows(
         extract_term(fit_full, "group_high"),
-        extract_term(fit_full, "group_high:datasetMETABRIC"),
+        extract_term(fit_full, dataset_terms$early),
         extract_term(fit_full, "group_high:post60"),
-        extract_term(fit_full, "group_high:datasetMETABRIC:post60")
+        extract_term(fit_full, dataset_terms$late)
       ) %>% mutate(subtype = subtype_value, feature = feature_name, endpoint = endpoint_name)
 
       implied_rows[[length(implied_rows) + 1]] <- bind_rows(
-        extract_contrast(fit_full, c("group_high" = 1)) %>% mutate(subtype = subtype_value, feature = feature_name, endpoint = endpoint_name, dataset = "TCGA", window = "0-60m"),
-        extract_contrast(fit_full, c("group_high" = 1, "group_high:post60" = 1)) %>% mutate(subtype = subtype_value, feature = feature_name, endpoint = endpoint_name, dataset = "TCGA", window = ">60m"),
-        extract_contrast(fit_full, c("group_high" = 1, "group_high:datasetMETABRIC" = 1)) %>% mutate(subtype = subtype_value, feature = feature_name, endpoint = endpoint_name, dataset = "METABRIC", window = "0-60m"),
-        extract_contrast(fit_full, c("group_high" = 1, "group_high:datasetMETABRIC" = 1, "group_high:post60" = 1, "group_high:datasetMETABRIC:post60" = 1)) %>% mutate(subtype = subtype_value, feature = feature_name, endpoint = endpoint_name, dataset = "METABRIC", window = ">60m")
+        extract_contrast(fit_full, c("group_high" = 1)) %>% mutate(subtype = subtype_value, feature = feature_name, endpoint = endpoint_name, dataset = opt$dataset1_label, window = "0-60m"),
+        extract_contrast(fit_full, c("group_high" = 1, "group_high:post60" = 1)) %>% mutate(subtype = subtype_value, feature = feature_name, endpoint = endpoint_name, dataset = opt$dataset1_label, window = ">60m"),
+        extract_contrast(fit_full, setNames(c(1, 1), c("group_high", dataset_terms$early))) %>% mutate(subtype = subtype_value, feature = feature_name, endpoint = endpoint_name, dataset = opt$dataset2_label, window = "0-60m"),
+        extract_contrast(fit_full, setNames(c(1, 1, 1, 1), c("group_high", dataset_terms$early, "group_high:post60", dataset_terms$late))) %>% mutate(subtype = subtype_value, feature = feature_name, endpoint = endpoint_name, dataset = opt$dataset2_label, window = ">60m")
       )
     }
   }
@@ -566,8 +580,9 @@ write_run_metadata_guardrail(
     endpoints = paste(endpoint_list, collapse = ","),
     subtype_list = paste(subtype_list, collapse = ","),
     adjust_covariates = opt$adjust_covariates,
-    cut_months = opt$cut_months,
-    dataset1_primary_pattern = opt$dataset1_primary_pattern
+    dataset1_label = opt$dataset1_label,
+    dataset2_label = opt$dataset2_label,
+    cut_months = opt$cut_months
   ),
   scope = "exploratory"
 )

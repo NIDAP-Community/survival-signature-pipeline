@@ -132,3 +132,15 @@ This session moved the repository from an architectural assessment into a runnab
 - Generalized the maintained pooled CLI surface from `tcga_*` and `metabric_*` flag names to `dataset1_*` and `dataset2_*` names while keeping compatibility aliases for the old flags.
 - Updated the maintained pooled driver help text and smoke-test examples to document the neutral two-dataset interface first.
 - Kept the underlying pooled model implementation and historical term extraction intact so the refactor remained surface-level and backward compatible.
+
+## Next Follow-On Refactor
+
+- Generalized the maintained pooled model internals so the fitted interaction-term lookups and implied dataset-window summaries derive from the actual fitted coefficient names rather than assuming a hardcoded METABRIC comparison level.
+- Added optional `dataset1_label` and `dataset2_label` flags to the maintained pooled drivers so emitted tables can carry dataset names that match the supplied inputs.
+- Left the underlying two-dataset comparison design intact so the refactor remained limited to internal labeling and term resolution.
+
+## Maintained Input Contract Update
+
+- Removed the maintained primary-only sample filtering step from the single-cohort and pooled maintained drivers.
+- The maintained interface now assumes datasets are already post-filtered upstream and treats dataset labels as user-supplied titles through `dataset1_label` and `dataset2_label` for pooled outputs.
+- Any remaining primary-filter assumptions are now confined to legacy wrappers rather than the maintained workflows.

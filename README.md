@@ -100,7 +100,7 @@ The drivers/ directory contains newer command-line scripts for pooled and piecew
 - run_signature_consistency_summary.R
 - run_finalized_pooled_results_bundle.R
 
-These scripts are non-interactive and executable with Rscript. The pooled drivers currently assume two harmonized datasets and now expose neutral `dataset1_*` and `dataset2_*` flags, while retaining the historical TCGA/METABRIC-shaped names as compatibility aliases. The single-cohort analysis and reporting drivers are intended for one dataset at a time.
+These scripts are non-interactive and executable with Rscript. The pooled drivers currently assume two harmonized datasets and now expose neutral `dataset1_*` and `dataset2_*` flags, while retaining the historical TCGA/METABRIC-shaped names as compatibility aliases. They also accept optional `dataset1_label` and `dataset2_label` flags so emitted pooled outputs can use dataset names that match the supplied inputs. The maintained drivers expect datasets to be post-filtered upstream rather than applying a primary-only sample filter internally. The single-cohort analysis and reporting drivers are intended for one dataset at a time.
 
 They now share a common execution path through entrypoint.R and default to run-scoped output directories under results/.
 
@@ -167,9 +167,10 @@ The repository is intended to become reusable, but several current scripts still
 
 - newer pooled drivers currently default to two example datasets represented by TCGA-like and METABRIC-like smoke fixtures
 - older src/drivers/ scripts are BRCA-focused and assume BRCA subtype labels
-- several scripts assume a TCGA primary-tumor filter based on sample IDs containing _01
+- maintained drivers expect post-filtered inputs and do not apply a primary-only sample filter internally
+- several legacy scripts still assume a TCGA primary-tumor filter based on sample IDs containing _01
 
-These cohort-aware assumptions still appear in the compatibility alias layer and in some workflow internals, but the maintained pooled CLI now prefers neutral names such as dataset1_expr_file, dataset2_expr_file, dataset1_stage_column, and dataset2_stage_column. The workflows remain semantically two-dataset workflows even though the long-term target is broader dataset generality.
+These cohort-aware assumptions now mainly appear in the compatibility alias layer and in legacy wrappers, but the maintained pooled CLI now prefers neutral names such as dataset1_expr_file, dataset2_expr_file, dataset1_stage_column, and dataset2_stage_column. The pooled model outputs can label datasets generically through dataset1_label and dataset2_label, even though the workflows remain semantically two-dataset workflows.
 
 ### Column-name assumptions
 

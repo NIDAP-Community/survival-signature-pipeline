@@ -83,7 +83,7 @@ The maintained driver layer is currently the drivers/ directory. These scripts s
 - record metadata through the provenance utility
 - stay focused on workflow execution rather than manuscript text
 
-They now rely on a small shared CLI utility layer for repeated surface-level mechanics, while still retaining workflow-specific semantics. The maintained pooled CLI now prefers neutral dataset1/dataset2 flag names, with legacy tcga/metabric aliases retained for compatibility.
+They now rely on a small shared CLI utility layer for repeated surface-level mechanics, while still retaining workflow-specific semantics. The maintained pooled CLI now prefers neutral dataset1/dataset2 flag names, with legacy tcga/metabric aliases retained for compatibility, and the pooled maintained drivers can emit dataset labels from dataset1_label/dataset2_label rather than hardcoding cohort names in their maintained outputs. The maintained drivers also assume datasets are already post-filtered upstream rather than reapplying a primary-only sample filter internally.
 
 In the first wave, these drivers still retain some historical two-dataset naming and model assumptions. The second wave will reduce those assumptions further.
 
@@ -99,7 +99,7 @@ Within drivers/, reporting is still a separate downstream concern:
 
 These maintained reporting workflows share some utility code, but they still remain separate workflows with separate reporting scopes, layouts, and outputs.
 
-An intentionally retained inconsistency is the alias layer in the pooled maintained workflows. Legacy flags such as tcga_expr_file and metabric_meta_file are still accepted for compatibility, even though the primary maintained interface now uses dataset1_expr_file and dataset2_meta_file. The workflows themselves remain semantically tied to a two-dataset comparison design, even though the long-term target is broader dataset generality.
+An intentionally retained inconsistency is the compatibility alias layer and the fixed two-dataset comparison design in the pooled maintained workflows. Legacy flags such as tcga_expr_file and metabric_meta_file are still accepted for compatibility, even though the primary maintained interface now uses dataset1_expr_file and dataset2_meta_file and the maintained outputs can label datasets generically.
 
 ### Legacy layer
 

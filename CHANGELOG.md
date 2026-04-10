@@ -31,9 +31,14 @@
 - Generalized the maintained pooled reporting bundle so downstream dataset labels, panel ordering, exploratory dataset selection, and summary text are inferred from supplied result tables instead of hardcoding TCGA and METABRIC.
 - Consolidated shared reporting table-formatting helpers into src/utilities/reporting_helpers.R and updated maintained reporting drivers to use them.
 - Replaced the maintained pooled CLI surface with neutral dataset1_* and dataset2_* flag names while retaining tcga_* and metabric_* names as compatibility aliases.
+- Generalized the maintained pooled modeling internals so dataset interaction term lookup and implied dataset-window contrasts are resolved from the fitted model coefficients instead of assuming a METABRIC comparison level.
+- Added optional dataset1_label and dataset2_label flags to the maintained pooled drivers so pooled outputs can carry dataset names that match the supplied inputs.
+- Removed the maintained primary-only sample filtering step so maintained workflows now expect already post-filtered inputs from upstream preprocessing.
 - Updated public-facing documentation and smoke-test examples to document the neutral two-dataset interface first and to use placeholder feature names GENE_A through GENE_D.
 
 ### Notes
 
 - The maintained pooled workflows are now CLI-agnostic and reporting-agnostic with respect to dataset names, but the underlying modeling layer still retains a two-dataset comparison design and some historical term assumptions.
 - The neutral pooled CLI surface was revalidated through the maintained dataset-interaction and subtype-specific smoke paths.
+- The pooled modeling layer was revalidated with custom labels CohortA and CohortB to confirm that maintained outputs no longer depend on TCGA/METABRIC-specific coefficient names.
+- Maintained workflows no longer attempt to infer or enforce a primary-only sample subset; upstream preprocessing is now the expected place for that decision.

@@ -246,3 +246,37 @@ Rationale:
 Current effect:
 
 - drivers/run_finalized_pooled_results_bundle.R now orders reporting panels from observed dataset and window values, resolves exploratory_dataset dynamically when omitted, and writes generic report text instead of TCGA/METABRIC-specific narrative.
+
+## 2026-04-10: Resolve Pooled Model Dataset Terms From Fitted Coefficients
+
+Decision:
+
+- Keep the maintained pooled workflows as two-dataset comparison models, but stop hardcoding the second dataset level name inside maintained model-term extraction and implied-contrast generation.
+- Allow maintained pooled outputs to use optional dataset1_label and dataset2_label values.
+
+Rationale:
+
+- After neutralizing the maintained pooled CLI, the remaining hardcoded METABRIC term lookups were the main reason the internals still behaved like named-cohort workflows.
+- Resolving the relevant interaction coefficients from the fitted model names keeps the statistical design unchanged while removing unnecessary coupling to specific dataset labels.
+
+Current effect:
+
+- drivers/run_piecewise_dataset_interaction.R and drivers/run_piecewise_subtype_specific.R now derive the second-dataset interaction terms from the fitted model coefficients and emit implied dataset-window summaries using dataset1_label and dataset2_label.
+- The maintained pooled workflows still intentionally retain a two-dataset comparison structure.
+
+## 2026-04-10: Expect Post-Filtered Inputs in the Maintained Drivers
+
+Decision:
+
+- Remove the maintained primary-only sample filtering step from the maintained single-cohort and pooled drivers.
+- Treat any primary-sample selection as an upstream preprocessing responsibility rather than an in-driver workflow option.
+
+Rationale:
+
+- The intended production input for this repository is a post-filtered dataset, so reapplying a primary-only heuristic inside maintained drivers is the wrong layer of responsibility.
+- Removing the filter from the maintained interface makes the pipeline contract more explicit and avoids encoding dataset-specific sample-ID assumptions in the maintained path.
+
+Current effect:
+
+- drivers/run_single_cohort_survival.R, drivers/run_piecewise_dataset_interaction.R, and drivers/run_piecewise_subtype_specific.R no longer apply an internal primary-only sample filter.
+- Any remaining primary-filter logic is now limited to legacy wrappers under src/drivers/.

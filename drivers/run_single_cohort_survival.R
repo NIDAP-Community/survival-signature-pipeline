@@ -24,8 +24,6 @@ cli_defaults <- list(
   pfi_event_column = "PFI",
   pfi_time_column = "PFI_time",
   subtype_filter = "ALL",
-  primary_filter = "tcga_primary",
-  primary_pattern = "_01",
   adjust_covariates = "subtype_stage_age",
   split_method = "tertiles",
   include_groups = "low,high",
@@ -47,7 +45,7 @@ print_usage <- function() {
     defaults = cli_defaults,
     summary_lines = c(
       "subtype_column is optional unless subtype filtering or subtype-adjusted modeling is requested.",
-      "primary_filter=tcga_primary uses primary_pattern to subset sample IDs.",
+      "Inputs are expected to be post-filtered upstream; the maintained driver does not apply an internal primary-only sample filter.",
       "adjust_covariates supports: none, subtype, stage, age, subtype_stage, subtype_age, stage_age, subtype_stage_age."
     )
   )
@@ -166,9 +164,6 @@ if (!has_subtype_column && subtype_adjustment_requested) {
 }
 
 metadata_filtered <- metadata
-if (tolower(opt$primary_filter) == "tcga_primary") {
-  metadata_filtered <- metadata_filtered %>% filter(grepl(opt$primary_pattern, .data[[opt$sample_column]]))
-}
 
 if (has_subtype_column && subtype_filter_requested) {
   selected_subtypes <- cli_parse_csv_list(opt$subtype_filter)
@@ -176,7 +171,7 @@ if (has_subtype_column && subtype_filter_requested) {
 }
 
 if (!nrow(metadata_filtered)) {
-  stop("No metadata rows remain after filtering. Check --primary-filter and --subtype-filter.")
+  stop("No metadata rows remain after filtering. Check --subtype-filter and upstream dataset preparation.")
 }
 
 dir.create(opt$output_dir, recursive = TRUE, showWarnings = FALSE)
@@ -264,8 +259,6 @@ write_run_metadata_guardrail(
     endpoints = opt$endpoints,
     analysis_genes = paste(analysis_genes, collapse = ","),
     subtype_filter = opt$subtype_filter,
-    primary_filter = opt$primary_filter,
-    primary_pattern = opt$primary_pattern,
     adjust_covariates = opt$adjust_covariates,
     split_method = opt$split_method,
     include_groups = paste(include_groups, collapse = ","),

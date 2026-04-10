@@ -16,6 +16,8 @@ cli_defaults <- list(
   dataset1_meta_file = file.path("test_data", "tcga_metadata.csv"),
   dataset2_expr_file = file.path("test_data", "metabric_expression.tsv"),
   dataset2_meta_file = file.path("test_data", "metabric_metadata.csv"),
+  dataset1_label = "Dataset1",
+  dataset2_label = "Dataset2",
   dataset1_sample_column = "sampnames",
   dataset2_sample_column = "sampnames",
   dataset1_subtype_column = "Subtype",
@@ -30,9 +32,7 @@ cli_defaults <- list(
   os_time_column = "OS_time",
   pfi_event_column = "PFI",
   pfi_time_column = "PFI_time",
-  dataset1_primary_pattern = "_01",
   subtype = "ALL",
-  dataset1_primary_filter = "tcga_primary",
   adjust_covariates = "none",
   features = "GENE_A,GENE_B,GENE_C,GENE_D,Signature",
   endpoints = "OS,PFI",
@@ -48,7 +48,8 @@ print_usage <- function() {
     summary_lines = c(
       "This workflow expects two harmonized datasets and models dataset interaction terms across them.",
       "Endpoint columns are configurable through the OS/PFI event and time flags.",
-      "dataset1_primary_filter uses dataset1_primary_pattern to subset dataset1 sample IDs when enabled."
+      "Inputs are expected to be post-filtered upstream; the maintained driver does not apply an internal primary-only sample filter.",
+      "dataset1_label and dataset2_label control the dataset titles written into pooled outputs."
     ),
     aliases = c(
       tcga_expr_file = "dataset1_expr_file",
@@ -62,9 +63,7 @@ print_usage <- function() {
       tcga_stage_column = "dataset1_stage_column",
       metabric_stage_column = "dataset2_stage_column",
       tcga_age_column = "dataset1_age_column",
-      metabric_age_column = "dataset2_age_column",
-      tcga_primary_pattern = "dataset1_primary_pattern",
-      tcga_primary_filter = "dataset1_primary_filter"
+      metabric_age_column = "dataset2_age_column"
     )
   )
 }
@@ -85,9 +84,7 @@ opt <- parse_standard_cli_args(
     tcga_stage_column = "dataset1_stage_column",
     metabric_stage_column = "dataset2_stage_column",
     tcga_age_column = "dataset1_age_column",
-    metabric_age_column = "dataset2_age_column",
-    tcga_primary_pattern = "dataset1_primary_pattern",
-    tcga_primary_filter = "dataset1_primary_filter"
+    metabric_age_column = "dataset2_age_column"
   )
 )
 opt$cut_months <- cli_parse_numeric_flag(opt$cut_months, "cut_months")
@@ -100,6 +97,13 @@ opt$adjust_covariates <- cli_parse_enum_flag(
 feature_list <- cli_parse_csv_list(opt$features)
 endpoint_list <- cli_parse_csv_list(opt$endpoints, uppercase = TRUE)
 signature_genes <- cli_parse_csv_list(opt$signature_genes)
+
+if (!nzchar(opt$dataset1_label) || !nzchar(opt$dataset2_label)) {
+  stop("--dataset1-label and --dataset2-label must both be non-empty.")
+}
+if (identical(opt$dataset1_label, opt$dataset2_label)) {
+  stop("--dataset1-label and --dataset2-label must be distinct.")
+}
 
 assert_output_guardrails(opt$output_dir)
 
@@ -190,7 +194,7 @@ harmonize_stage <- function(x) {
   out
 }
 
-prepare_dataset <- function(dataset_label, expr, metadata, gene_column, sample_column, subtype_column, stage_column, age_column, subtype_filter, endpoint, primary_filter, primary_pattern, feature_name, signature_genes, options) {
+prepare_dataset <- function(dataset_label, expr, metadata, gene_column, sample_column, subtype_column, stage_column, age_column, subtype_filter, endpoint, feature_name, signature_genes, options) {
   if (!sample_column %in% names(metadata)) stop(dataset_label, " metadata missing sample column: ", sample_column)
   if (!subtype_column %in% names(metadata)) stop(dataset_label, " metadata missing subtype column: ", subtype_column)
   if (!stage_column %in% names(metadata)) stop(dataset_label, " metadata missing stage column: ", stage_column)
@@ -207,9 +211,6 @@ prepare_dataset <- function(dataset_label, expr, metadata, gene_column, sample_c
     metadata_filtered <- metadata_filtered %>% filter(.data[[subtype_column]] %in% selected_subtypes)
   }
 
-  if (identical(primary_filter, "tcga_primary")) {
-    metadata_filtered <- metadata_filtered %>% filter(grepl(primary_pattern, .data[[sample_column]]))
-  }
 
   if (!all(c(event_column, time_column) %in% names(metadata_filtered))) {
     stop("Missing endpoint columns in ", dataset_label, ": ", event_column, ", ", time_column)
@@ -300,6 +301,21 @@ extract_all_terms <- function(fit) {
   out
 }
 
+resolve_dataset_interaction_terms <- function(fit) {
+  coefficient_names <- names(stats::coef(fit))
+  early_term <- grep("^group_high:dataset[^:]+$", coefficient_names, value = TRUE)
+  late_term <- grep("^group_high:dataset[^:]+:post60$|^group_high:post60:dataset[^:]+$", coefficient_names, value = TRUE)
+
+  if (length(early_term) > 1 || length(late_term) > 1) {
+    stop("Unable to resolve unique dataset interaction terms from fitted model coefficients.")
+  }
+
+  list(
+    early = if (length(early_term)) early_term[[1]] else NA_character_,
+    late = if (length(late_term)) late_term[[1]] else NA_character_
+  )
+}
+
 extract_contrast <- function(fit, term_weights) {
   coefficients <- stats::coef(fit)
   variance_matrix <- stats::vcov(fit)
@@ -354,7 +370,7 @@ for (feature_name in feature_list) {
     message("Fitting piecewise model for ", feature_name, " (", endpoint_name, ")")
 
     dataset1_df <- prepare_dataset(
-      dataset_label = "TCGA",
+      dataset_label = opt$dataset1_label,
       expr = dataset1_expr,
       metadata = dataset1_meta,
       gene_column = opt$gene_column,
@@ -364,15 +380,13 @@ for (feature_name in feature_list) {
       age_column = opt$dataset1_age_column,
       subtype_filter = opt$subtype,
       endpoint = endpoint_name,
-      primary_filter = opt$dataset1_primary_filter,
-      primary_pattern = opt$dataset1_primary_pattern,
       feature_name = feature_name,
       signature_genes = signature_genes,
       options = opt
     )
 
     dataset2_df <- prepare_dataset(
-      dataset_label = "METABRIC",
+      dataset_label = opt$dataset2_label,
       expr = dataset2_expr,
       metadata = dataset2_meta,
       gene_column = opt$gene_column,
@@ -382,15 +396,13 @@ for (feature_name in feature_list) {
       age_column = opt$dataset2_age_column,
       subtype_filter = opt$subtype,
       endpoint = endpoint_name,
-      primary_filter = "none",
-      primary_pattern = opt$dataset1_primary_pattern,
       feature_name = feature_name,
       signature_genes = signature_genes,
       options = opt
     )
 
     combined_df <- bind_rows(dataset1_df, dataset2_df)
-    combined_df$dataset <- factor(combined_df$dataset, levels = c("TCGA", "METABRIC"))
+    combined_df$dataset <- factor(combined_df$dataset, levels = c(opt$dataset1_label, opt$dataset2_label))
 
     early_df <- combined_df %>%
       transmute(
@@ -484,12 +496,13 @@ for (feature_name in feature_list) {
 
     lrt_dataset <- anova(fit_no_dataset_interaction, fit_full, test = "LRT")
     lrt_threeway <- anova(fit_no_threeway, fit_full, test = "LRT")
+    dataset_terms <- resolve_dataset_interaction_terms(fit_full)
 
     term_table <- bind_rows(
       extract_term(fit_full, "group_high"),
-      extract_term(fit_full, "group_high:datasetMETABRIC"),
+      extract_term(fit_full, dataset_terms$early),
       extract_term(fit_full, "group_high:post60"),
-      extract_term(fit_full, "group_high:datasetMETABRIC:post60")
+      extract_term(fit_full, dataset_terms$late)
     ) %>%
       mutate(feature = feature_name, endpoint = endpoint_name)
 
@@ -521,36 +534,31 @@ for (feature_name in feature_list) {
       dataset2_high_n = pull_count(dataset2_counts, "High", "n"),
       dataset2_low_events = pull_count(dataset2_counts, "Low", "events"),
       dataset2_high_events = pull_count(dataset2_counts, "High", "events"),
-      hr_high_tcga_early = extract_term(fit_full, "group_high")$HR,
-      p_high_tcga_early = extract_term(fit_full, "group_high")$p_value,
-      hr_dataset_interaction_early = extract_term(fit_full, "group_high:datasetMETABRIC")$HR,
-      p_dataset_interaction_early = extract_term(fit_full, "group_high:datasetMETABRIC")$p_value,
-      hr_tcga_late_shift = extract_term(fit_full, "group_high:post60")$HR,
-      p_tcga_late_shift = extract_term(fit_full, "group_high:post60")$p_value,
-      hr_dataset_late_shift_interaction = extract_term(fit_full, "group_high:datasetMETABRIC:post60")$HR,
-      p_dataset_late_shift_interaction = extract_term(fit_full, "group_high:datasetMETABRIC:post60")$p_value,
+      hr_high_dataset1_early = extract_term(fit_full, "group_high")$HR,
+      p_high_dataset1_early = extract_term(fit_full, "group_high")$p_value,
+      hr_dataset_interaction_early = extract_term(fit_full, dataset_terms$early)$HR,
+      p_dataset_interaction_early = extract_term(fit_full, dataset_terms$early)$p_value,
+      hr_dataset1_late_shift = extract_term(fit_full, "group_high:post60")$HR,
+      p_dataset1_late_shift = extract_term(fit_full, "group_high:post60")$p_value,
+      hr_dataset_late_shift_interaction = extract_term(fit_full, dataset_terms$late)$HR,
+      p_dataset_late_shift_interaction = extract_term(fit_full, dataset_terms$late)$p_value,
       lrt_dataset_interaction_p = extract_lrt_p(lrt_dataset),
       lrt_threeway_p = extract_lrt_p(lrt_threeway)
     )
 
     dataset1_early <- extract_contrast(fit_full, c("group_high" = 1))
     dataset1_late <- extract_contrast(fit_full, c("group_high" = 1, "group_high:post60" = 1))
-    dataset2_early <- extract_contrast(fit_full, c("group_high" = 1, "group_high:datasetMETABRIC" = 1))
+    dataset2_early <- extract_contrast(fit_full, setNames(c(1, 1), c("group_high", dataset_terms$early)))
     dataset2_late <- extract_contrast(
       fit_full,
-      c(
-        "group_high" = 1,
-        "group_high:datasetMETABRIC" = 1,
-        "group_high:post60" = 1,
-        "group_high:datasetMETABRIC:post60" = 1
-      )
+      setNames(c(1, 1, 1, 1), c("group_high", dataset_terms$early, "group_high:post60", dataset_terms$late))
     )
 
     implied_rows[[length(implied_rows) + 1]] <- bind_rows(
-      dataset1_early %>% mutate(feature = feature_name, endpoint = endpoint_name, dataset = "TCGA", window = "0-60m"),
-      dataset1_late %>% mutate(feature = feature_name, endpoint = endpoint_name, dataset = "TCGA", window = ">60m"),
-      dataset2_early %>% mutate(feature = feature_name, endpoint = endpoint_name, dataset = "METABRIC", window = "0-60m"),
-      dataset2_late %>% mutate(feature = feature_name, endpoint = endpoint_name, dataset = "METABRIC", window = ">60m")
+      dataset1_early %>% mutate(feature = feature_name, endpoint = endpoint_name, dataset = opt$dataset1_label, window = "0-60m"),
+      dataset1_late %>% mutate(feature = feature_name, endpoint = endpoint_name, dataset = opt$dataset1_label, window = ">60m"),
+      dataset2_early %>% mutate(feature = feature_name, endpoint = endpoint_name, dataset = opt$dataset2_label, window = "0-60m"),
+      dataset2_late %>% mutate(feature = feature_name, endpoint = endpoint_name, dataset = opt$dataset2_label, window = ">60m")
     )
   }
 }
@@ -608,13 +616,13 @@ md_rows <- apply(results_df, 1, function(row_values) {
     " | ", row_values[["model_covariates"]],
     " | ", format_num(as.numeric(row_values[["model_rows"]]), 4),
     " | ", format_num(as.numeric(row_values[["model_events"]]), 4),
-    " | ", format_num(as.numeric(row_values[["hr_high_tcga_early"]]), 4),
-    " | ", format_num(as.numeric(row_values[["p_high_tcga_early"]]), 3),
+    " | ", format_num(as.numeric(row_values[["hr_high_dataset1_early"]]), 4),
+    " | ", format_num(as.numeric(row_values[["p_high_dataset1_early"]]), 3),
     " | ", format_num(as.numeric(row_values[["hr_dataset_interaction_early"]]), 4),
     " | ", format_num(as.numeric(row_values[["p_dataset_interaction_early"]]), 3),
     " | ", format_num(as.numeric(row_values[["q_dataset_interaction_early_bh"]]), 3),
-    " | ", format_num(as.numeric(row_values[["hr_tcga_late_shift"]]), 4),
-    " | ", format_num(as.numeric(row_values[["p_tcga_late_shift"]]), 3),
+    " | ", format_num(as.numeric(row_values[["hr_dataset1_late_shift"]]), 4),
+    " | ", format_num(as.numeric(row_values[["p_dataset1_late_shift"]]), 3),
     " | ", format_num(as.numeric(row_values[["hr_dataset_late_shift_interaction"]]), 4),
     " | ", format_num(as.numeric(row_values[["p_dataset_late_shift_interaction"]]), 3),
     " | ", format_num(as.numeric(row_values[["q_dataset_late_shift_interaction_bh"]]), 3),
@@ -667,10 +675,11 @@ write_run_metadata_guardrail(
     dataset2_stage_column = opt$dataset2_stage_column,
     dataset1_age_column = opt$dataset1_age_column,
     dataset2_age_column = opt$dataset2_age_column,
+    dataset1_label = opt$dataset1_label,
+    dataset2_label = opt$dataset2_label,
     features = paste(feature_list, collapse = ","),
     endpoints = paste(endpoint_list, collapse = ","),
-    cut_months = opt$cut_months,
-    dataset1_primary_pattern = opt$dataset1_primary_pattern
+    cut_months = opt$cut_months
   ),
   scope = "exploratory"
 )
