@@ -5,7 +5,7 @@ Paste this into the very first Copilot chat in the new repository.
 ```text
 This repository is a reusable extraction of an older R-based survival-analysis workflow.
 
-The repo should follow the same broad architectural style as NIDAP-Community/multi-gene-correlations, but for survival analysis.
+The repo should follow a reusable, non-interactive survival-analysis architecture.
 
 Please work from these priorities:
 1. keep the repo reusable and standardized

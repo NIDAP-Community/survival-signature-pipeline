@@ -23,3 +23,17 @@
 
 - The repository is now runnable end to end through the maintained single-cohort smoke path and through pooled reporting contract smoke tests.
 - Broader cohort generalization and legacy driver unification remain deferred.
+
+## 2026-04-10
+
+### Changed
+
+- Generalized the maintained pooled reporting bundle so downstream dataset labels, panel ordering, exploratory dataset selection, and summary text are inferred from supplied result tables instead of hardcoding TCGA and METABRIC.
+- Consolidated shared reporting table-formatting helpers into src/utilities/reporting_helpers.R and updated maintained reporting drivers to use them.
+- Replaced the maintained pooled CLI surface with neutral dataset1_* and dataset2_* flag names while retaining tcga_* and metabric_* names as compatibility aliases.
+- Updated public-facing documentation and smoke-test examples to document the neutral two-dataset interface first and to use placeholder feature names GENE_A through GENE_D.
+
+### Notes
+
+- The maintained pooled workflows are now CLI-agnostic and reporting-agnostic with respect to dataset names, but the underlying modeling layer still retains a two-dataset comparison design and some historical term assumptions.
+- The neutral pooled CLI surface was revalidated through the maintained dataset-interaction and subtype-specific smoke paths.

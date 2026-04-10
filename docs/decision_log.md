@@ -214,3 +214,35 @@ Rationale:
 Current effect:
 
 - src/utilities/cli_helpers.R now holds shared maintained-driver CLI, parsing, endpoint-mapping, required-file-check, and table-loading helpers without changing workflow-specific modeling behavior.
+
+## 2026-04-10: Prefer Neutral Dataset Names in the Maintained Pooled CLI
+
+Decision:
+
+- Use dataset1_* and dataset2_* as the primary maintained flag names for pooled workflows.
+- Retain tcga_* and metabric_* only as compatibility aliases.
+
+Rationale:
+
+- The maintained pooled workflows are intended to support any pair of similarly structured datasets, not only historically named cohorts.
+- Neutral flag names reduce unnecessary project-specific coupling at the CLI surface without forcing a deeper model rewrite in the same change.
+
+Current effect:
+
+- drivers/run_piecewise_dataset_interaction.R and drivers/run_piecewise_subtype_specific.R now document and parse neutral dataset1/dataset2 flags first.
+- Historical tcga/metabric flag names still resolve to the same maintained options for backward compatibility.
+
+## 2026-04-10: Infer Pooled Reporting Dataset Labels From Inputs
+
+Decision:
+
+- Make the maintained pooled reporting bundle derive dataset labels and exploratory dataset defaults from the supplied upstream result tables rather than hardcoding named cohorts in reporting output.
+
+Rationale:
+
+- The downstream reporting layer does not need hardcoded cohort names when the upstream tables already carry dataset labels.
+- This keeps reporting reusable while leaving the deeper pooled modeling semantics unchanged until a later refactor.
+
+Current effect:
+
+- drivers/run_finalized_pooled_results_bundle.R now orders reporting panels from observed dataset and window values, resolves exploratory_dataset dynamically when omitted, and writes generic report text instead of TCGA/METABRIC-specific narrative.

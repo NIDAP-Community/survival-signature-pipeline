@@ -43,22 +43,6 @@ print_usage <- function() {
   )
 }
 
-fmt_num <- function(x, digits = 3) {
-  ifelse(is.na(x), NA_character_, formatC(x, format = "f", digits = digits))
-}
-
-fmt_p <- function(x) {
-  ifelse(
-    is.na(x),
-    NA_character_,
-    ifelse(x < 0.001, formatC(x, format = "e", digits = 2), formatC(x, format = "f", digits = 3))
-  )
-}
-
-fmt_ci <- function(low, high) {
-  paste0("[", fmt_num(low, 3), ", ", fmt_num(high, 3), "]")
-}
-
 extract_signature_summary <- function(signature_summary, endpoint_name, model_label) {
   if (is.null(signature_summary) || !inherits(signature_summary, "summary.coxph")) return(NULL)
   row_name <- if ("clusterC" %in% rownames(signature_summary$coefficients)) "clusterC" else rownames(signature_summary$coefficients)[1]
@@ -225,10 +209,10 @@ forest_md <- forest_df %>%
     feature = feature,
     model = model,
     comparison = comparison,
-    HR = fmt_num(HR, 3),
-    `95% CI` = fmt_ci(CI_low, CI_high),
-    p = fmt_p(p_value),
-    q = fmt_p(q_value)
+    HR = report_fmt_num(HR, 3),
+    `95% CI` = report_fmt_ci(CI_low, CI_high),
+    p = report_fmt_p(p_value),
+    q = report_fmt_p(q_value)
   )
 
 write_csv_and_md_table(

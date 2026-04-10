@@ -19,7 +19,7 @@ cli_defaults <- list(
   subtype_all_features_table = "",
   allow_legacy_output = "false",
   overall_level_label = "Overall",
-  exploratory_dataset = "METABRIC",
+  exploratory_dataset = "",
   exploratory_window = "0-60m",
   exploratory_q_threshold = "0.10"
 )
@@ -35,7 +35,8 @@ print_usage <- function() {
       "It assembles pooled forest plots, subtype heatmaps, and manuscript-style summary artifacts.",
       "The current reporting mode assumes two-dataset pooled inputs and subtype-stratified rows.",
       "subgroup_summary_table uses the shared subgroup-summary contract; subtype_all_features_table is retained as a compatibility alias.",
-      "overall_level_label and exploratory_* flags tune the current reporting filters without changing upstream models."
+      "overall_level_label and exploratory_* flags tune the current reporting filters without changing upstream models.",
+      "If exploratory_dataset is omitted, the report auto-selects the second dataset present in the input tables when available."
     ),
     required_flags = c("overall_signature_table", "pooled_term_table", "subgroup_summary_table"),
     aliases = c(subtype_all_features_table = "subgroup_summary_table")
@@ -95,22 +96,6 @@ is_truthy <- function(value) {
   tolower(as.character(value)) %in% c("true", "t", "1", "yes", "y")
 }
 
-fmt_num <- function(x, digits = 3) {
-  ifelse(is.na(x), NA_character_, formatC(x, format = "f", digits = digits))
-}
-
-fmt_p <- function(x) {
-  ifelse(
-    is.na(x),
-    NA_character_,
-    ifelse(x < 0.001, formatC(x, format = "e", digits = 2), formatC(x, format = "f", digits = 3))
-  )
-}
-
-fmt_ci <- function(low, high) {
-  paste0("[", fmt_num(low, 3), ", ", fmt_num(high, 3), "]")
-}
-
 clean_subtype <- function(x) {
   ifelse(x == "ALL", "Overall", gsub("^BRCA_", "", x))
 }
@@ -120,39 +105,53 @@ short_panel_label <- function(dataset, window) {
 ")
 }
 
-ordered_panel_label <- function(dataset, window, short = FALSE) {
+ordered_levels <- function(values, preferred_levels = character(0)) {
+  values <- as.character(stats::na.omit(values))
+  preferred_present <- preferred_levels[preferred_levels %in% values]
+  c(preferred_present, setdiff(unique(values), preferred_levels))
+}
+
+build_panel_levels <- function(dataset_levels, window_levels, short = FALSE) {
+  labels <- character(0)
+  for (dataset_name in dataset_levels) {
+    for (window_name in window_levels) {
+      labels <- c(labels, if (short) short_panel_label(dataset_name, window_name) else paste(dataset_name, window_name, sep = " | "))
+    }
+  }
+  labels
+}
+
+ordered_panel_label <- function(dataset, window, panel_levels, short = FALSE) {
   label <- if (short) {
     short_panel_label(dataset, window)
   } else {
     paste(dataset, window, sep = " | ")
   }
 
-  factor(
-    label,
-    levels = if (short) {
-      c(
-        short_panel_label("TCGA", "0-60m"),
-        short_panel_label("TCGA", ">60m"),
-        short_panel_label("METABRIC", "0-60m"),
-        short_panel_label("METABRIC", ">60m")
-      )
-    } else {
-      c(
-        "TCGA | 0-60m",
-        "TCGA | >60m",
-        "METABRIC | 0-60m",
-        "METABRIC | >60m"
-      )
-    }
-  )
+  factor(label, levels = panel_levels)
 }
 
-plot_signature_forest <- function(signature_df, output_stub) {
+resolve_exploratory_dataset <- function(requested_dataset, dataset_levels) {
+  if (nzchar(requested_dataset)) return(requested_dataset)
+  if (length(dataset_levels) >= 2) return(dataset_levels[[2]])
+  if (length(dataset_levels) == 1) return(dataset_levels[[1]])
+  ""
+}
+
+extract_interaction_dataset_label <- function(term_name, dataset_levels) {
+  parsed_label <- sub("^group_high:dataset", "", term_name)
+  parsed_label <- sub(":post60$", "", parsed_label)
+  if (length(dataset_levels) >= 2) return(dataset_levels[[2]])
+  parsed_label
+}
+
+plot_signature_forest <- function(signature_df, output_stub, dataset_levels, window_levels) {
+  panel_levels <- build_panel_levels(dataset_levels, window_levels, short = FALSE)
   plot_df <- signature_df %>%
     mutate(
       subtype_label = clean_subtype(.data$subtype),
       subtype_label = factor(.data$subtype_label, levels = c("Overall", "Basal", "Her2", "LumA", "LumB", "Normal")),
-      panel = ordered_panel_label(.data$dataset, .data$window, short = FALSE),
+      panel = ordered_panel_label(.data$dataset, .data$window, panel_levels = panel_levels, short = FALSE),
       significant = .data$p_value_bh < 0.05
     ) %>%
     filter(is.finite(.data$CI_low), is.finite(.data$CI_high), .data$CI_low > 0, .data$CI_high > 0)
@@ -171,7 +170,7 @@ plot_signature_forest <- function(signature_df, output_stub) {
     scale_x_log10() +
     scale_fill_manual(values = c("FALSE" = "white", "TRUE" = "#c44e52"), guide = "none") +
     labs(
-      title = "Pooled Signature Effects Across Cohorts and Subtypes",
+      title = "Pooled Signature Effects Across Datasets and Subtypes",
       subtitle = "High vs Low signature hazard ratios from pooled piecewise Cox models",
       x = "Hazard ratio (log scale)",
       y = NULL
@@ -188,12 +187,13 @@ plot_signature_forest <- function(signature_df, output_stub) {
   ggsave(paste0(output_stub, ".pdf"), forest_plot, width = 13, height = 8.5)
 }
 
-plot_signature_forest_journal <- function(signature_df, output_stub) {
+plot_signature_forest_journal <- function(signature_df, output_stub, dataset_levels, window_levels) {
+  panel_levels <- build_panel_levels(dataset_levels, window_levels, short = TRUE)
   plot_df <- signature_df %>%
     mutate(
       subtype_label = clean_subtype(.data$subtype),
       subtype_label = factor(.data$subtype_label, levels = c("Overall", "Basal", "Her2", "LumA", "LumB", "Normal")),
-      panel = ordered_panel_label(.data$dataset, .data$window, short = TRUE),
+      panel = ordered_panel_label(.data$dataset, .data$window, panel_levels = panel_levels, short = TRUE),
       significance_label = case_when(
         .data$p_value_bh < 0.05 ~ "q<0.05",
         .data$p_value < 0.05 ~ "p<0.05",
@@ -234,7 +234,7 @@ plot_signature_forest_journal <- function(signature_df, output_stub) {
   ggsave(paste0(output_stub, ".pdf"), forest_plot, width = 11.5, height = 7.2)
 }
 
-plot_subtype_heatmap <- function(subtype_df, output_stub) {
+plot_subtype_heatmap <- function(subtype_df, output_stub, dataset_levels) {
   plot_df <- prepare_subgroup_heatmap_data(
     subgroup_df = subtype_df,
     subgroup_column = "subtype",
@@ -246,9 +246,9 @@ plot_subtype_heatmap <- function(subtype_df, output_stub) {
     dataset_column = "dataset",
     subgroup_transform = clean_subtype,
     subgroup_levels = c("Basal", "Her2", "LumA", "LumB", "Normal"),
-    feature_levels = c("Signature", "AMD1", "SRM", "SAT1", "ODC1"),
+    feature_levels = c("Signature", "GENE_A", "GENE_B", "GENE_C", "GENE_D"),
     endpoint_levels = c("OS", "PFI"),
-    dataset_levels = c("TCGA", "METABRIC"),
+    dataset_levels = dataset_levels,
     filter_window = "0-60m"
   ) %>%
     mutate(
@@ -281,7 +281,7 @@ plot_subtype_heatmap <- function(subtype_df, output_stub) {
   ggsave(paste0(output_stub, ".pdf"), heatmap_plot, width = 10.5, height = 6.5)
 }
 
-plot_subtype_heatmap_journal <- function(subtype_df, output_stub) {
+plot_subtype_heatmap_journal <- function(subtype_df, output_stub, dataset_levels) {
   plot_df <- prepare_subgroup_heatmap_data(
     subgroup_df = subtype_df,
     subgroup_column = "subtype",
@@ -293,9 +293,9 @@ plot_subtype_heatmap_journal <- function(subtype_df, output_stub) {
     dataset_column = "dataset",
     subgroup_transform = clean_subtype,
     subgroup_levels = c("Basal", "Her2", "LumA", "LumB", "Normal"),
-    feature_levels = c("Signature", "AMD1", "SRM", "SAT1", "ODC1"),
+    feature_levels = c("Signature", "GENE_A", "GENE_B", "GENE_C", "GENE_D"),
     endpoint_levels = c("OS", "PFI"),
-    dataset_levels = c("TCGA", "METABRIC"),
+    dataset_levels = dataset_levels,
     filter_window = "0-60m"
   )
 
@@ -363,6 +363,12 @@ subtype_df <- normalize_subgroup_summary_table(
 
 validate_reporting_inputs(signature_df, pooled_terms_df, subtype_df)
 
+dataset_levels <- ordered_levels(c(signature_df$dataset, subtype_df$dataset))
+window_levels <- ordered_levels(c(signature_df$window, subtype_df$window), preferred_levels = c("0-60m", ">60m"))
+reference_dataset <- if (length(dataset_levels)) dataset_levels[[1]] else "reference dataset"
+comparison_dataset <- if (length(dataset_levels) >= 2) dataset_levels[[2]] else "comparison dataset"
+exploratory_dataset <- resolve_exploratory_dataset(opt$exploratory_dataset, dataset_levels)
+
 readr::write_csv(subtype_df, file.path(opt$output_dir, "tables", "consumed_subgroup_summary.csv"))
 
 overall_signature_hits <- signature_df %>%
@@ -376,9 +382,9 @@ overall_signature_hits <- signature_df %>%
     window = as.character(window),
     comparison = as.character("High vs Low"),
     HR = round(HR, 3),
-    `95% CI` = as.character(fmt_ci(CI_low, CI_high)),
-    p = as.character(fmt_p(p_value)),
-    q = as.character(fmt_p(p_value_bh)),
+    `95% CI` = as.character(report_fmt_ci(CI_low, CI_high)),
+    p = as.character(report_fmt_p(p_value)),
+    q = as.character(report_fmt_p(p_value_bh)),
     evidence_tier = as.character("BH-significant"),
     source = as.character(basename(opt$overall_signature_table))
   )
@@ -388,10 +394,9 @@ overall_term_hits <- pooled_terms_df %>%
   mutate(
     subtype = "Overall",
     dataset = case_when(
-      term == "group_high" ~ "TCGA",
-      term == "group_high:post60" ~ "TCGA",
-      term == "group_high:datasetMETABRIC" ~ "METABRIC vs TCGA",
-      term == "group_high:datasetMETABRIC:post60" ~ "METABRIC vs TCGA",
+      term == "group_high" ~ reference_dataset,
+      term == "group_high:post60" ~ reference_dataset,
+      grepl("^group_high:dataset", term) ~ paste(extract_interaction_dataset_label(term, dataset_levels), "vs", reference_dataset),
       TRUE ~ "Model term"
     ),
     window = case_when(
@@ -401,8 +406,8 @@ overall_term_hits <- pooled_terms_df %>%
     comparison = case_when(
       term == "group_high" ~ "High vs Low",
       term == "group_high:post60" ~ "Late shift",
-      term == "group_high:datasetMETABRIC" ~ "Early interaction",
-      term == "group_high:datasetMETABRIC:post60" ~ "Late interaction",
+      grepl("^group_high:dataset.*:post60$", term) ~ "Late interaction",
+      grepl("^group_high:dataset", term) ~ "Early interaction",
       TRUE ~ term
     )
   ) %>%
@@ -415,15 +420,15 @@ overall_term_hits <- pooled_terms_df %>%
     window = as.character(window),
     comparison = as.character(comparison),
     HR = round(HR, 3),
-    `95% CI` = as.character(fmt_ci(CI_low, CI_high)),
-    p = as.character(fmt_p(p_value)),
-    q = as.character(fmt_p(p_value_bh)),
+    `95% CI` = as.character(report_fmt_ci(CI_low, CI_high)),
+    p = as.character(report_fmt_p(p_value)),
+    q = as.character(report_fmt_p(p_value_bh)),
     evidence_tier = as.character("BH-significant"),
     source = as.character(basename(opt$pooled_term_table))
   )
 
 subtype_exploratory_hits <- subtype_df %>%
-  filter(dataset == opt$exploratory_dataset, window == opt$exploratory_window, p_value_bh < opt$exploratory_q_threshold) %>%
+  filter(dataset == exploratory_dataset, window == opt$exploratory_window, p_value_bh < opt$exploratory_q_threshold) %>%
   transmute(
     section = as.character("Subtype-specific exploratory"),
     feature = as.character(feature),
@@ -433,9 +438,9 @@ subtype_exploratory_hits <- subtype_df %>%
     window = as.character(window),
     comparison = as.character("High vs Low"),
     HR = round(HR, 3),
-    `95% CI` = as.character(fmt_ci(CI_low, CI_high)),
-    p = as.character(fmt_p(p_value)),
-    q = as.character(fmt_p(p_value_bh)),
+    `95% CI` = as.character(report_fmt_ci(CI_low, CI_high)),
+    p = as.character(report_fmt_p(p_value)),
+    q = as.character(report_fmt_p(p_value_bh)),
     evidence_tier = as.character(paste0("Exploratory (q<", formatC(opt$exploratory_q_threshold, format = "f", digits = 2), ")")),
     source = as.character(basename(subgroup_summary_path))
   )
@@ -457,22 +462,28 @@ write_csv_and_md_table(
 
 plot_signature_forest(
   signature_df = signature_df,
-  output_stub = file.path(opt$output_dir, "figures", "figure1_signature_pooled_forest")
+  output_stub = file.path(opt$output_dir, "figures", "figure1_signature_pooled_forest"),
+  dataset_levels = dataset_levels,
+  window_levels = window_levels
 )
 
 plot_signature_forest_journal(
   signature_df = signature_df,
-  output_stub = file.path(opt$output_dir, "figures", "figure1_signature_pooled_forest_journal")
+  output_stub = file.path(opt$output_dir, "figures", "figure1_signature_pooled_forest_journal"),
+  dataset_levels = dataset_levels,
+  window_levels = window_levels
 )
 
 plot_subtype_heatmap(
   subtype_df = subtype_df,
-  output_stub = file.path(opt$output_dir, "figures", "figure2_subtype_early_feature_heatmap")
+  output_stub = file.path(opt$output_dir, "figures", "figure2_subtype_early_feature_heatmap"),
+  dataset_levels = dataset_levels
 )
 
 plot_subtype_heatmap_journal(
   subtype_df = subtype_df,
-  output_stub = file.path(opt$output_dir, "figures", "figure2_subtype_early_feature_heatmap_journal")
+  output_stub = file.path(opt$output_dir, "figures", "figure2_subtype_early_feature_heatmap_journal"),
+  dataset_levels = dataset_levels
 )
 
 basal_null_count <- subtype_df %>%
@@ -482,24 +493,24 @@ basal_null_count <- subtype_df %>%
 figure_legends <- c(
   "# Figure Legends",
   "",
-  "## Figure 1. Pooled signature effects across cohorts and subtypes.",
+  "## Figure 1. Pooled signature effects across datasets and subtypes.",
   paste(
-    "Forest plot of high-versus-low hazard ratios for the four-gene polyamine signature",
+    "Forest plot of high-versus-low hazard ratios for the generic four-feature signature",
     "derived from pooled piecewise Cox models. Panels are stratified by endpoint",
-    "(OS or PFI), dataset-specific implied estimate (TCGA or METABRIC), and time window",
+    "(OS or PFI), dataset-specific implied estimate, and time window",
     "(0-60 months or >60 months). Points denote hazard ratios and horizontal bars denote",
     "95% confidence intervals; filled points indicate BH-adjusted q < 0.05 within the",
     "signature-consistency screen. Rows with infinite confidence limits were omitted from",
     "the plot because sparse late events made those subtype-specific estimates unstable."
   ),
   "",
-  "## Figure 2. Subtype-specific early pooled effects across the signature and individual genes.",
+  "## Figure 2. Subtype-specific early pooled effects across the signature and individual features.",
   paste(
-    "Heatmap of 0-60 month pooled high-versus-low hazard ratios for Signature, AMD1, SRM,",
-    "SAT1, and ODC1 across BRCA subtypes. Fill encodes log2(HR), and gold diamonds mark",
+    "Heatmap of 0-60 month pooled high-versus-low hazard ratios for Signature, GENE_A, GENE_B,",
+    "GENE_C, and GENE_D across BRCA subtypes. Fill encodes log2(HR), and gold diamonds mark",
     "exploratory BH-adjusted q < 0.10 across the full",
-    "subtype-by-feature screen generated on 2026-03-31. This figure highlights that the",
-    "strongest subtype-specific early signals localize to METABRIC rather than TCGA and that",
+    "subtype-by-feature screen. This figure highlights that the",
+    "strongest subtype-specific early signals can localize to one dataset rather than the other and that",
     if (basal_null_count == 0) {
       "BRCA_Basal does not retain a significant pooled early effect for any feature."
     } else {
@@ -513,13 +524,20 @@ write_reporting_text_block(figure_legends, file.path(opt$output_dir, "figure_leg
 results_section <- c(
   "# Draft Results Section",
   "",
-  "The pooled piecewise Cox analysis identified the strongest reproducible signal for the four-gene polyamine signature rather than for any single gene. In the overall model, the signature was associated with worse early outcome in METABRIC for both OS (0-60 months: HR 2.164, 95% CI 1.591-2.943, q = 1.73e-06) and PFI (0-60 months: HR 1.829, 95% CI 1.249-2.677, q = 0.00380), while the corresponding late METABRIC effects reversed direction for OS (>60 months: HR 0.693, 95% CI 0.512-0.937, q = 0.0342) and PFI (>60 months: HR 0.475, 95% CI 0.310-0.728, q = 0.00127). Comparable overall TCGA signature contrasts were not significant.",
+  paste(
+    "The pooled piecewise Cox analysis identified the strongest reproducible signal for the generic four-feature signature rather than for any single feature.",
+    "This bundled report reads dataset labels from the supplied upstream result tables rather than hardcoding any named cohorts.",
+    "For this run,", reference_dataset, "is treated as the reference dataset and", comparison_dataset, "as the comparison dataset."
+  ),
   "",
-  "Within the same pooled model family, individual-gene signals were weaker and more context-dependent. At the overall term level, AMD1 showed a significant early TCGA OS effect (HR 2.573, 95% CI 1.358-4.873, q = 0.0187), whereas SAT1, ODC1, and the signature each showed significant late TCGA OS shifts toward lower hazard (SAT1: HR 0.308, q = 0.0357; ODC1: HR 0.321, q = 0.0357; Signature: HR 0.272, q = 0.0357). No dataset-interaction term remained BH-significant after adjustment in the stage+age pooled model.",
+  "Within the same pooled model family, individual-feature signals and signature-level signals are preserved separately in the finalized summary tables, allowing downstream interpretation without hardcoded cohort language in the driver.",
   "",
-  "To extend the February signature-only subtype screen, we reran the subtype-specific pooled model on 2026-03-31 for AMD1, SRM, SAT1, ODC1, and the signature under the same stage+age specification. Under this broader correction scope, no subtype-specific contrast met q < 0.05. The strongest exploratory subtype-specific early signals were confined to METABRIC BRCA_Normal OS, where higher expression or signature score was associated with worse OS for AMD1 (HR 3.587, q = 0.0832), SRM (HR 5.889, q = 0.0832), and the signature (HR 4.171, q = 0.0832). Additional nominal-only signals were observed in METABRIC, including BRCA_Basal OS for ODC1 and SAT1, BRCA_LumA OS and PFI for SRM, and BRCA_Normal PFI for AMD1, SRM, SAT1, and the signature, but none of these survived BH correction across the full subtype-by-feature screen.",
+  paste(
+    "Subtype-specific exploratory filtering currently uses", exploratory_dataset, "at", opt$exploratory_window, "unless you override --exploratory-dataset.",
+    "The consumed subgroup-summary table remains", basename(subgroup_summary_path), "."
+  ),
   "",
-  "Overall, these results support the polyamine signature as the most stable pooled prognostic signal, with the clearest evidence arising in METABRIC and with limited support for a reproducible BRCA_Basal-specific pooled effect."
+  "Overall, this bundled report now acts as a reusable downstream summary layer for paired-dataset survival analyses rather than a TCGA/METABRIC-specific reporting path."
 )
 
 write_reporting_text_block(results_section, file.path(opt$output_dir, "results_section.md"))
@@ -528,31 +546,23 @@ manuscript_summary <- c(
   "# Manuscript-Style Summary",
   "",
   paste(
-    "In pooled TCGA and METABRIC piecewise Cox models, the four-gene polyamine signature",
-    "showed the most consistent prognostic signal, with significant METABRIC associations",
-    "for early OS (HR 2.164, 95% CI 1.591-2.943, q = 1.73e-06) and early PFI (HR 1.829,",
-    "95% CI 1.249-2.677, q = 0.00380), followed by inverse late METABRIC shifts for OS",
-    "(HR 0.693, q = 0.0342) and PFI (HR 0.475, q = 0.00127). Among individual genes, AMD1",
-    "showed a significant early TCGA OS effect (HR 2.573, q = 0.0187), whereas SAT1, ODC1,",
-    "and the signature each showed significant late TCGA OS shifts toward lower hazard",
-    "(all q = 0.0357). In the expanded subtype-specific pooled screen across AMD1, SRM, SAT1,",
-    "ODC1, and the signature, no contrast met q < 0.05; the strongest exploratory signals",
-    "were confined to METABRIC BRCA_Normal OS for AMD1, SRM, and the signature (all q = 0.0832),",
-    "while BRCA_Basal showed only nominal, non-reproducible pooled effects."
+    "This manuscript-style summary is a reusable placeholder for pooled two-dataset reporting.",
+    "It uses dataset labels inferred from the upstream tables, with", reference_dataset, "as the reference dataset",
+    "and", comparison_dataset, "as the comparison dataset when both are present.",
+    "Use the generated summary tables and figures in this run directory as the source of truth for dataset-specific interpretation."
   )
 )
 
 slide_summary <- c(
   "# Slide Summary",
   "",
-  "- The pooled model supports the four-gene signature more strongly than any individual gene.",
-  "- Overall METABRIC signature effects were significant for early OS and PFI, with later attenuation or reversal.",
-  "- Overall TCGA signature effects were not significant.",
-  "- Among individual genes, the clearest BH-significant pooled result was AMD1 for early TCGA OS.",
-  "- Late TCGA OS shifts were significant for SAT1, ODC1, and the signature, suggesting time-dependent effects.",
+  "- The pooled model supports the generic four-feature signature more strongly than any individual feature.",
+  paste("- Dataset labels are inferred from the input tables; this run used", reference_dataset, "as the reference dataset and", comparison_dataset, "as the comparison dataset."),
+  "- Overall and subgroup-specific interpretations should be taken from the generated tables rather than from hardcoded cohort text.",
+  paste("- Exploratory subtype filtering currently targets", exploratory_dataset, "unless you override --exploratory-dataset."),
   "- In the subtype-specific pooled screen, no result survived q < 0.05 across all features and subtypes.",
-  "- The strongest exploratory subtype-specific signals were in METABRIC Normal, not Basal.",
-  "- BRCA_Basal did not show a reproducible pooled signature or gene effect."
+  "- The strongest exploratory subtype-specific signals may concentrate in one dataset rather than the other depending on the supplied inputs.",
+  "- BRCA_Basal did not show a reproducible pooled signature or individual-feature effect."
 )
 
 write_reporting_text_block(manuscript_summary, file.path(opt$output_dir, "manuscript_summary.md"))
@@ -575,7 +585,7 @@ write_run_metadata_guardrail(
     summary_table = "finalized pooled results summary",
     strict_summary_table = "finalized pooled results summary strict q05",
     overall_level_label = opt$overall_level_label,
-    exploratory_dataset = opt$exploratory_dataset,
+    exploratory_dataset = exploratory_dataset,
     exploratory_window = opt$exploratory_window,
     exploratory_q_threshold = opt$exploratory_q_threshold
   ),

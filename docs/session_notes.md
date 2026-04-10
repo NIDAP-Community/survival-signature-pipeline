@@ -126,3 +126,9 @@ This session moved the repository from an architectural assessment into a runnab
 - Consolidated shared parsing, endpoint mapping, required-file checks, and maintained analysis-table loaders in src/utilities/cli_helpers.R.
 - Aligned docs and examples to the entrypoint-first interface.
 - Re-ran the maintained single-cohort and pooled reporting smoke baselines successfully after the utility extractions.
+
+## Follow-On Refactor
+
+- Generalized the maintained pooled CLI surface from `tcga_*` and `metabric_*` flag names to `dataset1_*` and `dataset2_*` names while keeping compatibility aliases for the old flags.
+- Updated the maintained pooled driver help text and smoke-test examples to document the neutral two-dataset interface first.
+- Kept the underlying pooled model implementation and historical term extraction intact so the refactor remained surface-level and backward compatible.

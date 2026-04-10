@@ -24,7 +24,7 @@ The repository currently has one strong reusable core, a small but real utility 
 
 - src/core/GeneExpressionBasedSurvivalAnalys.r contains the main reusable survival-analysis function.
 - src/utilities/run_provenance_guardrails.R contains shared provenance, output, and subgroup-summary interface helpers.
-- src/utilities/reporting_helpers.R contains shared reporting-side subgroup heatmap preparation, shared reporting output scaffolding, and minimal common plotting defaults.
+- src/utilities/reporting_helpers.R contains shared reporting-side subgroup heatmap preparation, shared reporting output scaffolding, shared reporting table-formatting helpers, and minimal common plotting defaults.
 - src/utilities/cli_helpers.R contains the small shared maintained-driver CLI and pre-load utility layer.
 - drivers/ contains the maintained pooled and piecewise workflows.
 - drivers/ now also contains a maintained single-cohort analysis workflow that runs through the reusable core.
@@ -55,7 +55,7 @@ These helpers are shared infrastructure and should remain independent from analy
 
 ### Reporting utility layer
 
-The reporting utility layer currently lives in src/utilities/reporting_helpers.R. This layer is responsible for narrowly shared downstream reporting helpers, currently limited to subgroup heatmap preparation, shared reporting output scaffolding, and a small set of common plotting defaults.
+The reporting utility layer currently lives in src/utilities/reporting_helpers.R. This layer is responsible for narrowly shared downstream reporting helpers, currently limited to subgroup heatmap preparation, shared reporting output scaffolding, shared reporting table-formatting helpers, and a small set of common plotting defaults.
 
 This layer exists to reduce duplicated reporting code without merging separate reporting workflows or pushing reporting behavior into the core analysis engine.
 
@@ -83,9 +83,9 @@ The maintained driver layer is currently the drivers/ directory. These scripts s
 - record metadata through the provenance utility
 - stay focused on workflow execution rather than manuscript text
 
-They now rely on a small shared CLI utility layer for repeated surface-level mechanics, while still retaining workflow-specific semantics and cohort-aware flags where those names carry real meaning.
+They now rely on a small shared CLI utility layer for repeated surface-level mechanics, while still retaining workflow-specific semantics. The maintained pooled CLI now prefers neutral dataset1/dataset2 flag names, with legacy tcga/metabric aliases retained for compatibility.
 
-In the first wave, these drivers remain TCGA and METABRIC aware. The second wave will reduce those assumptions further.
+In the first wave, these drivers still retain some historical two-dataset naming and model assumptions. The second wave will reduce those assumptions further.
 
 The maintained driver layer now has two categories:
 
@@ -99,7 +99,7 @@ Within drivers/, reporting is still a separate downstream concern:
 
 These maintained reporting workflows share some utility code, but they still remain separate workflows with separate reporting scopes, layouts, and outputs.
 
-An intentionally retained inconsistency is the cohort-aware naming in the pooled maintained workflows. Flags such as tcga_expr_file and metabric_meta_file are still explicit because those maintained workflows remain semantically tied to two-dataset TCGA plus METABRIC comparisons.
+An intentionally retained inconsistency is the alias layer in the pooled maintained workflows. Legacy flags such as tcga_expr_file and metabric_meta_file are still accepted for compatibility, even though the primary maintained interface now uses dataset1_expr_file and dataset2_meta_file. The workflows themselves remain semantically tied to a two-dataset comparison design, even though the long-term target is broader dataset generality.
 
 ### Legacy layer
 
@@ -113,7 +113,7 @@ The current cleanup wave follows these rules:
 
 1. keep one clean root entrypoint before larger refactors
 2. parameterize maintained drivers enough to remove hard-coded run dates and code-embedded column assumptions
-3. preserve TCGA and METABRIC awareness for now instead of forcing early over-generalization
+3. preserve the current two-dataset comparison mechanics for now instead of forcing early over-generalization
 4. add smoke-test placeholders in test_data/ so the repository has an explicit input contract
 5. add a canonical smoke-test dataset in test_data/ so one maintained workflow is runnable end to end
 6. defer bigger cohort-generalization and driver unification work to the second wave

@@ -1,6 +1,6 @@
 # Reusable Survival Analysis Pipeline
 
-This repository is a reusable extraction of an older R-based survival-analysis workflow. The target architecture follows the same broad shape as NIDAP-Community/multi-gene-correlations, but the repository is not fully standardized yet.
+This repository is a reusable extraction of an older R-based survival-analysis workflow. The architecture target is a reusable, non-interactive survival-analysis pipeline, but the repository is not fully standardized yet.
 
 The current state is mixed:
 
@@ -73,7 +73,7 @@ src/utilities/run_provenance_guardrails.R provides output-path guardrails, run m
 
 ### Reporting utility layer
 
-src/utilities/reporting_helpers.R provides shared reporting-side helpers for subgroup heatmap preparation and common plotting defaults. These helpers reduce duplicated downstream reporting code, but they do not merge the reporting workflows or change the subgroup-summary contract.
+src/utilities/reporting_helpers.R provides shared reporting-side helpers for subgroup heatmap preparation, shared reporting output scaffolding, shared reporting table-formatting helpers, and common plotting defaults. These helpers reduce duplicated downstream reporting code, but they do not merge the reporting workflows or change the subgroup-summary contract.
 
 ### Maintained CLI utility layer
 
@@ -100,7 +100,7 @@ The drivers/ directory contains newer command-line scripts for pooled and piecew
 - run_signature_consistency_summary.R
 - run_finalized_pooled_results_bundle.R
 
-These scripts are non-interactive and executable with Rscript. The pooled drivers are still tied to TCGA and METABRIC defaults, while the single-cohort analysis and reporting drivers are intended for one dataset at a time.
+These scripts are non-interactive and executable with Rscript. The pooled drivers currently assume two harmonized datasets and now expose neutral `dataset1_*` and `dataset2_*` flags, while retaining the historical TCGA/METABRIC-shaped names as compatibility aliases. The single-cohort analysis and reporting drivers are intended for one dataset at a time.
 
 They now share a common execution path through entrypoint.R and default to run-scoped output directories under results/.
 
@@ -135,8 +135,8 @@ Typical example:
 
 ```text
 Gene    Sample1    Sample2    Sample3
-SAT1    1.2        0.8        1.5
-SRM     2.1        1.9        2.4
+GENE_A  1.2        0.8        1.5
+GENE_B  2.1        1.9        2.4
 ```
 
 ### Metadata table
@@ -165,11 +165,11 @@ The repository is intended to become reusable, but several current scripts still
 
 ### Dataset and cohort assumptions
 
-- newer pooled drivers currently default to TCGA plus METABRIC inputs
+- newer pooled drivers currently default to two example datasets represented by TCGA-like and METABRIC-like smoke fixtures
 - older src/drivers/ scripts are BRCA-focused and assume BRCA subtype labels
 - several scripts assume a TCGA primary-tumor filter based on sample IDs containing _01
 
-These cohort-aware assumptions are intentionally still visible in maintained flag names such as tcga_expr_file, metabric_expr_file, tcga_stage_column, and metabric_stage_column. They remain explicit because the pooled maintained workflows are still semantically two-dataset TCGA plus METABRIC workflows.
+These cohort-aware assumptions still appear in the compatibility alias layer and in some workflow internals, but the maintained pooled CLI now prefers neutral names such as dataset1_expr_file, dataset2_expr_file, dataset1_stage_column, and dataset2_stage_column. The workflows remain semantically two-dataset workflows even though the long-term target is broader dataset generality.
 
 ### Column-name assumptions
 
@@ -187,12 +187,12 @@ For the maintained single-cohort driver, the subtype column is optional unless s
 
 ### Feature assumptions
 
-Several drivers hard-code the historical four-gene signature:
+Several drivers hard-code a placeholder four-feature signature:
 
-- SAT1
-- SRM
-- ODC1
-- AMD1
+- GENE_A
+- GENE_B
+- GENE_C
+- GENE_D
 
 Several scripts also hard-code a 60-month early versus late split for piecewise modeling.
 
@@ -202,8 +202,8 @@ Use the maintained workflows according to the analysis shape you need.
 
 - Use `single-cohort-survival` when you have one dataset and want to run the reusable core analysis engine directly.
 - Use `single-cohort-reporting-bundle` when you already have a completed single-cohort run directory and want an overall forest summary, plus an optional subgroup heatmap if you supply subgroup rows explicitly.
-- Use `piecewise-dataset-interaction` when you have two datasets and want pooled piecewise modeling with dataset interaction terms.
-- Use `piecewise-subtype-specific` when you have two datasets and want pooled piecewise modeling within subtype strata. This workflow also emits a standardized subgroup summary table for downstream heatmaps.
+- Use `piecewise-dataset-interaction` when you have two harmonized datasets and want pooled piecewise modeling with dataset interaction terms.
+- Use `piecewise-subtype-specific` when you have two harmonized datasets and want pooled piecewise modeling within subtype strata. This workflow also emits a standardized subgroup summary table for downstream heatmaps.
 - Use `signature-consistency-summary` when upstream pooled and subtype result tables already exist and you want a compact comparison summary.
 - Use `finalized-pooled-results-bundle` when upstream pooled two-dataset result tables already exist and you want pooled forest plots, subtype heatmaps, and manuscript-style summary artifacts. This reporting workflow now consumes the shared subgroup-summary contract.
 
@@ -352,7 +352,7 @@ The canonical validated smoke test in this repository is:
 Rscript entrypoint.R single-cohort-survival \
   --expr-file test_data/tcga_expression.tsv \
   --meta-file test_data/tcga_metadata_no_subtype.csv \
-  --features AMD1 \
+  --features GENE_D \
   --endpoints OS \
   --adjust-covariates none \
   --output-dir results/smoke_test_single_cohort_canonical

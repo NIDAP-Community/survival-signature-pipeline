@@ -12,26 +12,26 @@ source("src/utilities/run_provenance_guardrails.R")
 
 cli_defaults <- list(
   output_dir = default_run_output_dir("piecewise_subtype_specific"),
-  tcga_expr_file = file.path("test_data", "tcga_expression.tsv"),
-  tcga_meta_file = file.path("test_data", "tcga_metadata.csv"),
-  metabric_expr_file = file.path("test_data", "metabric_expression.tsv"),
-  metabric_meta_file = file.path("test_data", "metabric_metadata.csv"),
-  tcga_sample_column = "sampnames",
-  metabric_sample_column = "sampnames",
-  tcga_subtype_column = "Subtype",
-  metabric_subtype_column = "Subtype",
-  tcga_stage_column = "ajcc_pathologic_tumor_stage",
-  metabric_stage_column = "stage_collapsed",
-  tcga_age_column = "Diagnosis_Age",
-  metabric_age_column = "Diagnosis_Age",
+  dataset1_expr_file = file.path("test_data", "tcga_expression.tsv"),
+  dataset1_meta_file = file.path("test_data", "tcga_metadata.csv"),
+  dataset2_expr_file = file.path("test_data", "metabric_expression.tsv"),
+  dataset2_meta_file = file.path("test_data", "metabric_metadata.csv"),
+  dataset1_sample_column = "sampnames",
+  dataset2_sample_column = "sampnames",
+  dataset1_subtype_column = "Subtype",
+  dataset2_subtype_column = "Subtype",
+  dataset1_stage_column = "ajcc_pathologic_tumor_stage",
+  dataset2_stage_column = "stage_collapsed",
+  dataset1_age_column = "Diagnosis_Age",
+  dataset2_age_column = "Diagnosis_Age",
   gene_column = "Gene",
-  signature_genes = "SAT1,SRM,ODC1,AMD1",
+  signature_genes = "GENE_A,GENE_B,GENE_C,GENE_D",
   os_event_column = "OS",
   os_time_column = "OS_time",
   pfi_event_column = "PFI",
   pfi_time_column = "PFI_time",
-  tcga_primary_pattern = "_01",
-  tcga_primary_filter = "tcga_primary",
+  dataset1_primary_pattern = "_01",
+  dataset1_primary_filter = "tcga_primary",
   features = "Signature",
   endpoints = "OS,PFI",
   subtype_list = "BRCA_Basal,BRCA_Her2,BRCA_LumA,BRCA_LumB,BRCA_Normal",
@@ -50,6 +50,22 @@ print_usage <- function() {
       "subtype_list controls which subtypes are evaluated; both datasets are still required.",
       "adjust_covariates supports none or stage_age in the current maintained version.",
       "It emits subgroup_effect_summary.csv using the shared subgroup-summary contract for downstream heatmaps."
+    ),
+    aliases = c(
+      tcga_expr_file = "dataset1_expr_file",
+      tcga_meta_file = "dataset1_meta_file",
+      metabric_expr_file = "dataset2_expr_file",
+      metabric_meta_file = "dataset2_meta_file",
+      tcga_sample_column = "dataset1_sample_column",
+      metabric_sample_column = "dataset2_sample_column",
+      tcga_subtype_column = "dataset1_subtype_column",
+      metabric_subtype_column = "dataset2_subtype_column",
+      tcga_stage_column = "dataset1_stage_column",
+      metabric_stage_column = "dataset2_stage_column",
+      tcga_age_column = "dataset1_age_column",
+      metabric_age_column = "dataset2_age_column",
+      tcga_primary_pattern = "dataset1_primary_pattern",
+      tcga_primary_filter = "dataset1_primary_filter"
     )
   )
 }
@@ -57,7 +73,23 @@ print_usage <- function() {
 opt <- parse_standard_cli_args(
   defaults = cli_defaults,
   workflow_name = "piecewise-subtype-specific",
-  help_printer = print_usage
+  help_printer = print_usage,
+  aliases = c(
+    tcga_expr_file = "dataset1_expr_file",
+    tcga_meta_file = "dataset1_meta_file",
+    metabric_expr_file = "dataset2_expr_file",
+    metabric_meta_file = "dataset2_meta_file",
+    tcga_sample_column = "dataset1_sample_column",
+    metabric_sample_column = "dataset2_sample_column",
+    tcga_subtype_column = "dataset1_subtype_column",
+    metabric_subtype_column = "dataset2_subtype_column",
+    tcga_stage_column = "dataset1_stage_column",
+    metabric_stage_column = "dataset2_stage_column",
+    tcga_age_column = "dataset1_age_column",
+    metabric_age_column = "dataset2_age_column",
+    tcga_primary_pattern = "dataset1_primary_pattern",
+    tcga_primary_filter = "dataset1_primary_filter"
+  )
 )
 opt$adjust_covariates <- cli_parse_enum_flag(
   value = opt$adjust_covariates,
@@ -75,10 +107,10 @@ assert_output_guardrails(opt$output_dir)
 
 cli_assert_existing_input_files(
   input_paths = c(
-    tcga_expr_file = opt$tcga_expr_file,
-    tcga_meta_file = opt$tcga_meta_file,
-    metabric_expr_file = opt$metabric_expr_file,
-    metabric_meta_file = opt$metabric_meta_file
+    dataset1_expr_file = opt$dataset1_expr_file,
+    dataset1_meta_file = opt$dataset1_meta_file,
+    dataset2_expr_file = opt$dataset2_expr_file,
+    dataset2_meta_file = opt$dataset2_meta_file
   ),
   workflow_name = "piecewise-subtype-specific"
 )
@@ -279,10 +311,10 @@ if (!dir.exists(file.path(opt$output_dir, "tables"))) dir.create(file.path(opt$o
 if (!dir.exists(file.path(opt$output_dir, "logs"))) dir.create(file.path(opt$output_dir, "logs"))
 
 message("Loading expression and metadata files...")
-tcga_expr <- read_expression_table(opt$tcga_expr_file, opt$gene_column)
-metabric_expr <- read_expression_table(opt$metabric_expr_file, opt$gene_column)
-tcga_meta <- read_metadata_table(opt$tcga_meta_file)
-metabric_meta <- read_metadata_table(opt$metabric_meta_file)
+dataset1_expr <- read_expression_table(opt$dataset1_expr_file, opt$gene_column)
+dataset2_expr <- read_expression_table(opt$dataset2_expr_file, opt$gene_column)
+dataset1_meta <- read_metadata_table(opt$dataset1_meta_file)
+dataset2_meta <- read_metadata_table(opt$dataset2_meta_file)
 
 summary_rows <- list()
 term_rows <- list()
@@ -293,45 +325,45 @@ for (feature_name in feature_list) {
     for (subtype_value in subtype_list) {
       message("Fitting subtype-specific model for ", feature_name, " (", endpoint_name, ", ", subtype_value, ")")
 
-      tcga_df <- prepare_dataset(
+      dataset1_df <- prepare_dataset(
         dataset_label = "TCGA",
-        expr = tcga_expr,
-        metadata = tcga_meta,
+        expr = dataset1_expr,
+        metadata = dataset1_meta,
         gene_column = opt$gene_column,
-        sample_column = opt$tcga_sample_column,
-        subtype_column = opt$tcga_subtype_column,
-        stage_column = opt$tcga_stage_column,
-        age_column = opt$tcga_age_column,
+        sample_column = opt$dataset1_sample_column,
+        subtype_column = opt$dataset1_subtype_column,
+        stage_column = opt$dataset1_stage_column,
+        age_column = opt$dataset1_age_column,
         endpoint = endpoint_name,
-        primary_filter = opt$tcga_primary_filter,
-        primary_pattern = opt$tcga_primary_pattern,
+        primary_filter = opt$dataset1_primary_filter,
+        primary_pattern = opt$dataset1_primary_pattern,
         feature_name = feature_name,
         subtype_value = subtype_value,
         signature_genes = signature_genes,
         options = opt
       )
 
-      metabric_df <- prepare_dataset(
+      dataset2_df <- prepare_dataset(
         dataset_label = "METABRIC",
-        expr = metabric_expr,
-        metadata = metabric_meta,
+        expr = dataset2_expr,
+        metadata = dataset2_meta,
         gene_column = opt$gene_column,
-        sample_column = opt$metabric_sample_column,
-        subtype_column = opt$metabric_subtype_column,
-        stage_column = opt$metabric_stage_column,
-        age_column = opt$metabric_age_column,
+        sample_column = opt$dataset2_sample_column,
+        subtype_column = opt$dataset2_subtype_column,
+        stage_column = opt$dataset2_stage_column,
+        age_column = opt$dataset2_age_column,
         endpoint = endpoint_name,
         primary_filter = "none",
-        primary_pattern = opt$tcga_primary_pattern,
+        primary_pattern = opt$dataset1_primary_pattern,
         feature_name = feature_name,
         subtype_value = subtype_value,
         signature_genes = signature_genes,
         options = opt
       )
 
-      if (is.null(tcga_df) || is.null(metabric_df)) next
+      if (is.null(dataset1_df) || is.null(dataset2_df)) next
 
-      combined_df <- bind_rows(tcga_df, metabric_df)
+      combined_df <- bind_rows(dataset1_df, dataset2_df)
       combined_df$dataset <- factor(combined_df$dataset, levels = c("TCGA", "METABRIC"))
       if (nlevels(droplevels(combined_df$dataset)) < 2) next
 
@@ -522,10 +554,10 @@ write_run_metadata_guardrail(
   purpose = "Run subtype-specific pooled piecewise Cox models with dataset interaction.",
   driver = "drivers/run_piecewise_subtype_specific.R",
   inputs = list(
-    tcga_expr_file = opt$tcga_expr_file,
-    tcga_meta_file = opt$tcga_meta_file,
-    metabric_expr_file = opt$metabric_expr_file,
-    metabric_meta_file = opt$metabric_meta_file
+    dataset1_expr_file = opt$dataset1_expr_file,
+    dataset1_meta_file = opt$dataset1_meta_file,
+    dataset2_expr_file = opt$dataset2_expr_file,
+    dataset2_meta_file = opt$dataset2_meta_file
   ),
   parameters = list(
     gene_column = opt$gene_column,
@@ -535,7 +567,7 @@ write_run_metadata_guardrail(
     subtype_list = paste(subtype_list, collapse = ","),
     adjust_covariates = opt$adjust_covariates,
     cut_months = opt$cut_months,
-    tcga_primary_pattern = opt$tcga_primary_pattern
+    dataset1_primary_pattern = opt$dataset1_primary_pattern
   ),
   scope = "exploratory"
 )

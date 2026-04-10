@@ -33,7 +33,7 @@ allow_legacy_output <- identical(Sys.getenv("SURVIVAL_ALLOW_LEGACY_OUTPUT"), "1"
 assert_output_guardrails(output_root, allow_legacy_output = allow_legacy_output)
 if (!dir.exists(output_root)) dir.create(output_root, recursive = TRUE)
 
-signature_genes <- c("SAT1","SRM","ODC1","AMD1")
+signature_genes <- c("GENE_A","GENE_B","GENE_C","GENE_D")
 
 covariates <- c("Diagnosis_Age","ajcc_pathologic_tumor_stage","race_collapsed","Subtype")
 

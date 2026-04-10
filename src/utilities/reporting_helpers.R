@@ -27,6 +27,22 @@ write_reporting_text_block <- function(lines, file_path) {
   writeLines(lines, con = file_path)
 }
 
+report_fmt_num <- function(x, digits = 3) {
+  ifelse(is.na(x), NA_character_, formatC(x, format = "f", digits = digits))
+}
+
+report_fmt_p <- function(x) {
+  ifelse(
+    is.na(x),
+    NA_character_,
+    ifelse(x < 0.001, formatC(x, format = "e", digits = 2), formatC(x, format = "f", digits = 3))
+  )
+}
+
+report_fmt_ci <- function(low, high, digits = 3) {
+  paste0("[", report_fmt_num(low, digits), ", ", report_fmt_num(high, digits), "]")
+}
+
 prepare_subgroup_heatmap_data <- function(
     subgroup_df,
     subgroup_column,

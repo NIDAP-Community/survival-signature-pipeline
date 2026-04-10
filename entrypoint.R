@@ -3,11 +3,11 @@
 workflow_specs <- list(
 	"piecewise-dataset-interaction" = list(
 		script = file.path("drivers", "run_piecewise_dataset_interaction.R"),
-		description = "Run pooled piecewise Cox models with dataset interaction across TCGA and METABRIC inputs."
+		description = "Run pooled piecewise Cox models with dataset interaction across two harmonized datasets."
 	),
 	"piecewise-subtype-specific" = list(
 		script = file.path("drivers", "run_piecewise_subtype_specific.R"),
-		description = "Run subtype-specific pooled piecewise Cox models across TCGA and METABRIC inputs."
+		description = "Run subtype-specific pooled piecewise Cox models across two harmonized datasets."
 	),
 	"single-cohort-survival" = list(
 		script = file.path("drivers", "run_single_cohort_survival.R"),

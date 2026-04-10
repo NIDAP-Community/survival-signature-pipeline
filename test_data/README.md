@@ -28,7 +28,7 @@ Canonical command:
 Rscript entrypoint.R single-cohort-survival \
   --expr-file test_data/tcga_expression.tsv \
   --meta-file test_data/tcga_metadata_no_subtype.csv \
-  --features AMD1 \
+  --features GENE_D \
   --endpoints OS \
   --adjust-covariates none \
   --output-dir results/smoke_test_single_cohort_canonical
@@ -51,10 +51,10 @@ Two-dataset interface smoke test:
 
 ```bash
 Rscript entrypoint.R piecewise-dataset-interaction \
-  --tcga-expr-file test_data/tcga_expression.tsv \
-  --tcga-meta-file test_data/tcga_metadata.csv \
-  --metabric-expr-file test_data/metabric_expression.tsv \
-  --metabric-meta-file test_data/metabric_metadata.csv \
+  --dataset1-expr-file test_data/tcga_expression.tsv \
+  --dataset1-meta-file test_data/tcga_metadata.csv \
+  --dataset2-expr-file test_data/metabric_expression.tsv \
+  --dataset2-meta-file test_data/metabric_metadata.csv \
   --features Signature \
   --endpoints OS
 ```
@@ -63,10 +63,10 @@ Subtype-specific smoke test:
 
 ```bash
 Rscript entrypoint.R piecewise-subtype-specific \
-  --tcga-expr-file test_data/tcga_expression.tsv \
-  --tcga-meta-file test_data/tcga_metadata.csv \
-  --metabric-expr-file test_data/metabric_expression.tsv \
-  --metabric-meta-file test_data/metabric_metadata.csv \
+  --dataset1-expr-file test_data/tcga_expression.tsv \
+  --dataset1-meta-file test_data/tcga_metadata.csv \
+  --dataset2-expr-file test_data/metabric_expression.tsv \
+  --dataset2-meta-file test_data/metabric_metadata.csv \
   --subtype-list BRCA_Basal \
   --adjust-covariates none \
   --features Signature \

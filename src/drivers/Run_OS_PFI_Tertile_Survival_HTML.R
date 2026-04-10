@@ -1,5 +1,5 @@
 # Run_OS_PFI_Tertile_Survival_HTML.R
-# Overall BRCA survival analyses for OS and PFI using the 4-gene signature (SAT1, SRM, ODC1, AMD1)
+# Overall BRCA survival analyses for OS and PFI using the 4-gene signature (GENE_A, GENE_B, GENE_C, GENE_D)
 # Using TERTILE grouping strategy
 
 suppressPackageStartupMessages({
@@ -74,7 +74,7 @@ if (!dir.exists(output_root)) dir.create(output_root, recursive = TRUE)
 write_run_metadata <- function(output_dir, expr_path, meta_path, n_before, n_after, covariates_used) {
   write_run_metadata_guardrail(
     output_dir = output_dir,
-    purpose = "Run OS and PFI survival analyses using a 4-gene signature with tertile grouping.",
+    purpose = "Run OS and PFI survival analyses using a placeholder 4-gene signature with tertile grouping.",
     driver = "src/drivers/Run_OS_PFI_Tertile_Survival_HTML.R",
     inputs = list(Expression_TSV = expr_path, Metadata_CSV = meta_path),
     parameters = list(
@@ -92,7 +92,7 @@ write_run_metadata <- function(output_dir, expr_path, meta_path, n_before, n_aft
   )
 }
 
-signature_genes <- c("SAT1", "SRM", "ODC1", "AMD1")
+signature_genes <- c("GENE_A", "GENE_B", "GENE_C", "GENE_D")
 base_covariates <- c("Diagnosis_Age", "ajcc_pathologic_tumor_stage", "race_collapsed", "Subtype")
 
 # Helper loaders --------------------------------------------------------------
