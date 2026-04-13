@@ -219,6 +219,38 @@ Current effect:
 
 Decision:
 
+## 2026-04-13: Treat Subtype as One Kind of Subgroup, Not the Core Abstraction
+
+Decision:
+
+- Treat subtype as one supported subgroup type within the maintained architecture rather than the primary abstraction for cohort-specific analyses and reporting.
+
+Rationale:
+
+- The repository needs to support cohorting patterns beyond breast-cancer subtype, such as responder status, Gleason risk bands, or other metadata-defined groups.
+- The shared downstream subgroup-summary contract already supports generic subgroup semantics, so the maintained workflows should align with that contract instead of reintroducing subtype-specific assumptions at the CLI and reporting layers.
+
+Current effect:
+
+- The maintained single-cohort workflow now supports generic `group_column` and `group_filter` flags while keeping subtype flags as compatibility aliases.
+- A maintained `subgroup-forest-bundle` workflow now generates downstream subgroup forest plots from the shared subgroup-summary contract.
+
+## 2026-04-13: Keep Generalization Incremental and Backward Compatible
+
+Decision:
+
+- Add the generic subgroup interface and downstream subgroup forest workflow as incremental maintained layers instead of replacing all subtype-oriented workflows in one step.
+
+Rationale:
+
+- The repository still contains working subtype-oriented paths and validation runs that need to remain reproducible while the generalized architecture matures.
+- Incremental maintained additions reduce migration risk and preserve comparability against prior BRCA-focused runs.
+
+Current effect:
+
+- Existing subtype-oriented invocations continue to work.
+- New subgroup-oriented invocations can be introduced without forcing an immediate rewrite of all legacy and pooled subtype-specific code.
+
 - Use dataset1_* and dataset2_* as the primary maintained flag names for pooled workflows.
 - Retain tcga_* and metabric_* only as compatibility aliases.
 
@@ -231,6 +263,42 @@ Current effect:
 
 - drivers/run_piecewise_dataset_interaction.R and drivers/run_piecewise_subtype_specific.R now document and parse neutral dataset1/dataset2 flags first.
 - Historical tcga/metabric flag names still resolve to the same maintained options for backward compatibility.
+
+## 2026-04-13: Use Explicit Metadata Columns as the Primary Maintained Covariate Interface
+
+Decision:
+
+- Treat maintained single-cohort covariate selection as an explicit dataset-specific metadata-column list.
+- Default maintained single-cohort adjustment to `none` unless the user requests columns explicitly.
+- Retain semantic aliases such as `age`, `stage`, `subtype`, and `race` only as optional conveniences.
+
+Rationale:
+
+- Covariate names vary too much across datasets to treat standardized names as a dependable repository-level contract.
+- Defaulting to implicit covariate selection makes cross-dataset reuse brittle and obscures what adjustment model actually ran.
+- An explicit column-list interface is more reproducible and easier to audit in run metadata.
+
+Current effect:
+
+- drivers/run_single_cohort_survival.R now defaults `adjust_covariates` to `none`.
+- The maintained single-cohort workflow accepts raw metadata column names in `--adjust-covariates` and skips missing requested columns with a warning.
+
+## 2026-04-13: Prefer Complete-Case Adjusted KM Models and Qualified Surv Formulas in the Reusable Core
+
+Decision:
+
+- Build adjusted grouped and continuous Cox models from explicit complete-case data frames in the reusable core.
+- Qualify programmatically constructed survival formulas with `survival::Surv(...)` rather than relying on unqualified formula evaluation.
+
+Rationale:
+
+- The BRCA validation work showed that adjusted per-gene KM rows could be lost when `Surv(...)` was evaluated outside a namespace-safe context.
+- Explicit complete-case model frames make the adjusted sample basis auditable and consistent across standard and early/late KM paths.
+
+Current effect:
+
+- src/core/GeneExpressionBasedSurvivalAnalys.r now preserves adjusted KM summary rows reliably in saved plot objects and rendered figures.
+- BRCA AMD1 early-window adjusted results now serialize and render with the expected `N = 956` basis.
 
 ## 2026-04-10: Infer Pooled Reporting Dataset Labels From Inputs
 

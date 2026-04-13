@@ -1,3 +1,11 @@
+# 2026-04-13
+
+- generalized the maintained single-cohort driver to support a generic `group_column` and `group_filter` interface while retaining `subtype_filter` as a compatibility path
+- added a maintained `subgroup-forest-bundle` workflow that builds generic forest plots from the shared subgroup-summary contract
+- added reusable subgroup forest plotting helpers so downstream reporting no longer needs to assume BRCA subtype semantics for every subgroup-oriented figure
+- updated README examples to describe generic subgroup cohorting such as subtype, response class, or Gleason risk bands
+- validated the generic subgroup filter path with a BRCA Basal smoke run and validated the new subgroup forest workflow against the shared subgroup-summary fixture
+
 ## 2026-04-08
 
 ### Added
@@ -42,3 +50,20 @@
 - The neutral pooled CLI surface was revalidated through the maintained dataset-interaction and subtype-specific smoke paths.
 - The pooled modeling layer was revalidated with custom labels CohortA and CohortB to confirm that maintained outputs no longer depend on TCGA/METABRIC-specific coefficient names.
 - Maintained workflows no longer attempt to infer or enforce a primary-only sample subset; upstream preprocessing is now the expected place for that decision.
+
+## 2026-04-13
+
+### Changed
+
+- Updated the maintained single-cohort workflow defaults so tertile analyses keep `low,mid,high` by default and plot generation is enabled by default for the maintained path.
+- Fixed reusable KM plotting so legend labels and colors are derived from fitted strata rather than assumed factor levels.
+- Fixed maintained per-gene and early/late adjusted KM summary generation by using explicit complete-case adjusted model data and qualifying constructed formulas with `survival::Surv(...)`.
+- Refactored the maintained single-cohort covariate interface so `--adjust-covariates` accepts explicit raw metadata column names, defaults to `none`, and skips missing requested columns with a warning.
+- Kept shorthand aliases for `subtype`, `stage`, `age`, and `race` only as convenience resolution on top of the explicit-column interface.
+- Updated README guidance to document explicit dataset-specific covariate selection as the preferred pattern for reusable single-cohort runs.
+
+### Notes
+
+- BRCA validation confirmed that the maintained AMD1 OS early-window adjusted KM rows now render with the expected `N = 956` basis.
+- Residual differences between the earlier legacy BRCA figure and the maintained BRCA figure were traced to a different adjustment set, specifically whether `race_collapsed` was included.
+- Broader generalization work has been identified around endpoint configuration, preprocessing contracts, and shared maintained covariate resolution across all maintained drivers.

@@ -158,6 +158,8 @@ Commonly used covariates in the current drivers:
 
 - age column
 - stage column
+- subtype column
+- race column
 
 ## Current Driver Assumptions
 
@@ -182,9 +184,27 @@ The reusable core supports configurable column names, but the current drivers fr
 - TCGA stage column: ajcc_pathologic_tumor_stage
 - METABRIC stage column: stage_collapsed
 - age column: Diagnosis_Age
+- race column: race_collapsed
 - endpoints: OS and PFI with paired time columns OS_time and PFI_time
 
 For the maintained single-cohort driver, the subtype column is optional unless subtype filtering or subtype-adjusted modeling is requested.
+For the maintained single-cohort driver, covariate selection is now best handled as an explicit CSV list through `--adjust-covariates`, using the actual metadata column names for the dataset you are running.
+
+The maintained single-cohort driver supports two covariate-spec styles:
+
+- raw metadata columns: any exact column names present in the metadata
+- semantic aliases: `subtype`, `stage`, `age`, `race`
+
+For portability across datasets, prefer raw metadata column names. Aliases are only a convenience when your current dataset happens to use the configured default column flags.
+
+Examples:
+
+- `--adjust-covariates Diagnosis_Age,ajcc_pathologic_tumor_stage,race_collapsed,Subtype`
+- `--adjust-covariates age_at_diagnosis,clinical_stage`
+- `--adjust-covariates age,race_collapsed`
+- `--adjust-covariates none`
+
+Requested covariates that are not present in a particular dataset are skipped automatically with a warning, which makes the maintained single-cohort workflow usable across datasets with partially overlapping metadata.
 
 ### Feature assumptions
 
@@ -203,6 +223,7 @@ Use the maintained workflows according to the analysis shape you need.
 
 - Use `single-cohort-survival` when you have one dataset and want to run the reusable core analysis engine directly.
 - Use `single-cohort-reporting-bundle` when you already have a completed single-cohort run directory and want an overall forest summary, plus an optional subgroup heatmap if you supply subgroup rows explicitly.
+- Use `subgroup-forest-bundle` when you already have subgroup summary rows in the shared contract and want a generic forest plot across any cohorting scheme, not only cancer subtype.
 - Use `piecewise-dataset-interaction` when you have two harmonized datasets and want pooled piecewise modeling with dataset interaction terms.
 - Use `piecewise-subtype-specific` when you have two harmonized datasets and want pooled piecewise modeling within subtype strata. This workflow also emits a standardized subgroup summary table for downstream heatmaps.
 - Use `signature-consistency-summary` when upstream pooled and subtype result tables already exist and you want a compact comparison summary.
@@ -237,14 +258,25 @@ Rscript entrypoint.R piecewise-subtype-specific \
 Rscript entrypoint.R single-cohort-survival \
   --expr-file test_data/tcga_expression.tsv \
   --meta-file test_data/tcga_metadata.csv \
+  --group-column Response \
+  --group-filter Responder \
   --endpoints OS \
-  --features Signature
+  --features Signature \
+  --adjust-covariates Diagnosis_Age,ajcc_pathologic_tumor_stage,race_collapsed,Subtype
 ```
 
 ```bash
 Rscript entrypoint.R single-cohort-reporting-bundle \
   --input-run-dir results/smoke_test_single_cohort \
   --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv
+```
+
+```bash
+Rscript entrypoint.R subgroup-forest-bundle \
+  --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv \
+  --subgroup-type-filter subtype \
+  --subgroup-order BRCA_Basal,BRCA_LumA \
+  --subgroup-labels Basal,LumA
 ```
 
 Downstream summary and reporting workflows require explicit upstream result tables:
@@ -263,6 +295,8 @@ The shared subgroup-summary contract for downstream heatmaps uses these columns:
 - p_value_bh
 
 Additional columns such as dataset, window, model, or covariates may be present and are preserved when available.
+
+The maintained code should treat these as generic subgroup rows, not inherently subtype rows. `subgroup_type` can be values such as `subtype`, `response_status`, `gleason_risk`, or any other cohorting definition that is meaningful for the dataset at hand.
 
 ```bash
 Rscript entrypoint.R signature-consistency-summary \
@@ -306,13 +340,22 @@ Rscript drivers/run_signature_consistency_summary.R \
 Rscript drivers/run_single_cohort_survival.R \
   --expr-file test_data/tcga_expression.tsv \
   --meta-file test_data/tcga_metadata.csv \
-  --endpoints OS
+  --group-column Response \
+  --group-filter Responder \
+  --endpoints OS \
+  --adjust-covariates Diagnosis_Age,ajcc_pathologic_tumor_stage,race_collapsed,Subtype
 ```
 
 ```bash
 Rscript drivers/run_single_cohort_reporting_bundle.R \
   --input-run-dir results/smoke_test_single_cohort \
   --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv
+```
+
+```bash
+Rscript drivers/run_subgroup_forest_bundle.R \
+  --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv \
+  --subgroup-type-filter subtype
 ```
 
 ```bash

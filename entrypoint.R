@@ -17,6 +17,10 @@ workflow_specs <- list(
 		script = file.path("drivers", "run_single_cohort_reporting_bundle.R"),
 		description = "Assemble single-cohort reporting artifacts from a prior single-cohort run directory."
 	),
+	"subgroup-forest-bundle" = list(
+		script = file.path("drivers", "run_subgroup_forest_bundle.R"),
+		description = "Build generic subgroup forest plots from a shared subgroup summary table."
+	),
 	"signature-consistency-summary" = list(
 		script = file.path("drivers", "run_signature_consistency_summary.R"),
 		description = "Compare overall versus subtype-specific signature results from upstream analysis tables."
@@ -47,6 +51,7 @@ print_usage <- function() {
 			"  Rscript entrypoint.R piecewise-subtype-specific --subtype-list BRCA_Basal --adjust-covariates none",
 			"  Rscript entrypoint.R single-cohort-survival --expr-file test_data/tcga_expression.tsv --meta-file test_data/tcga_metadata.csv --endpoints OS",
 			"  Rscript entrypoint.R single-cohort-reporting-bundle --input-run-dir results/smoke_test_single_cohort --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv",
+			"  Rscript entrypoint.R subgroup-forest-bundle --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv --subgroup-type-filter subtype",
 			"  Rscript entrypoint.R signature-consistency-summary --overall-implied-csv <path> --overall-summary-csv <path> --subtype-implied-csv <path> --subtype-summary-csv <path> --subtype-terms-csv <path>",
 			"  Rscript entrypoint.R finalized-pooled-results-bundle --overall-signature-table <path> --pooled-term-table <path> --subgroup-summary-table <path>",
 			sep = "\n"

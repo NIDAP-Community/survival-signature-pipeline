@@ -15,23 +15,27 @@ cli_defaults <- list(
   meta_file = file.path("test_data", "tcga_metadata.csv"),
   sample_column = "sampnames",
   gene_column = "Gene",
+  group_column = "",
+  group_filter = "ALL",
+  group_type = "subgroup",
   subtype_column = "Subtype",
   stage_column = "ajcc_pathologic_tumor_stage",
   age_column = "Diagnosis_Age",
+  race_column = "race_collapsed",
   signature_genes = "GENE_A,GENE_B,GENE_C,GENE_D",
   os_event_column = "OS",
   os_time_column = "OS_time",
   pfi_event_column = "PFI",
   pfi_time_column = "PFI_time",
   subtype_filter = "ALL",
-  adjust_covariates = "subtype_stage_age",
+  adjust_covariates = "none",
   split_method = "tertiles",
-  include_groups = "low,high",
+  include_groups = "low,mid,high",
   features = "Signature,GENE_A,GENE_B,GENE_C,GENE_D",
   endpoints = "OS,PFI",
   cut_months = "60",
-  run_km_individual = "false",
-  save_plots = "false",
+  run_km_individual = "true",
+  save_plots = "true",
   export_csv = "true",
   run_lasso = "false",
   verbose = "true"
@@ -44,9 +48,16 @@ print_usage <- function() {
     script_path = file.path("drivers", "run_single_cohort_survival.R"),
     defaults = cli_defaults,
     summary_lines = c(
-      "subtype_column is optional unless subtype filtering or subtype-adjusted modeling is requested.",
+      "group_column/group_filter provide the maintained generic cohorting interface for subgroup analyses.",
+      "subtype_column/subtype_filter are retained as compatibility flags for subtype-shaped datasets.",
       "Inputs are expected to be post-filtered upstream; the maintained driver does not apply an internal primary-only sample filter.",
-      "adjust_covariates supports: none, subtype, stage, age, subtype_stage, subtype_age, stage_age, subtype_stage_age."
+      "adjust_covariates should generally be supplied as explicit metadata column names for the current dataset.",
+      "Optional aliases are supported as a convenience only: subtype, stage, age, race.",
+      "Requested covariates missing from a dataset are skipped automatically; active group filtering requires the chosen group column."
+    ),
+    aliases = c(
+      subgroup_column = "group_column",
+      subgroup_filter = "group_filter"
     )
   )
 }
@@ -60,18 +71,57 @@ resolve_endpoint_columns <- function(endpoint_name, options) {
   resolve_standard_endpoint_columns(endpoint_name, options, "single-cohort-survival")
 }
 
-determine_covariates <- function(mode, subtype_column, stage_column, age_column) {
-  mode <- tolower(mode)
-  if (mode == "none") return(character(0))
-  covariates <- character(0)
-  if (grepl("subtype", mode)) covariates <- c(covariates, subtype_column)
-  if (grepl("stage", mode)) covariates <- c(covariates, stage_column)
-  if (grepl("age", mode)) covariates <- c(covariates, age_column)
-  unique(covariates)
+parse_covariate_request <- function(value, subtype_column, stage_column, age_column, race_column) {
+  alias_map <- c(
+    subtype = subtype_column,
+    stage = stage_column,
+    age = age_column,
+    race = race_column
+  )
+  legacy_pattern <- "^(subtype|stage|age|race)(_(subtype|stage|age|race))*$"
+  tokens <- cli_parse_csv_list(value, allow_empty = TRUE)
+  if (!length(tokens)) {
+    return(list(requested = character(0), columns = character(0), used_aliases = character(0)))
+  }
+
+  requested_columns <- character(0)
+  used_aliases <- character(0)
+
+  for (token in tokens) {
+    token_lower <- tolower(token)
+    if (token_lower == "none") {
+      next
+    }
+
+    if (token_lower %in% names(alias_map)) {
+      requested_columns <- c(requested_columns, alias_map[[token_lower]])
+      used_aliases <- c(used_aliases, token_lower)
+      next
+    }
+
+    if (grepl(legacy_pattern, token_lower)) {
+      parts <- unlist(strsplit(token_lower, "_", fixed = TRUE))
+      requested_columns <- c(requested_columns, unname(alias_map[parts]))
+      used_aliases <- c(used_aliases, parts)
+      next
+    }
+
+    requested_columns <- c(requested_columns, token)
+  }
+
+  list(
+    requested = tokens,
+    columns = unique(requested_columns[nzchar(requested_columns)]),
+    used_aliases = unique(used_aliases)
+  )
 }
 
 write_simple_markdown <- function(lines, file_path) {
   writeLines(lines, con = file_path)
+}
+
+filter_requested <- function(value) {
+  !(tolower(trimws(as.character(value))) %in% c("", "all", "overall", "any"))
 }
 
 build_endpoint_summary <- function(endpoint_name, endpoint_dir, result, feature_list, covariate_mode) {
@@ -106,19 +156,24 @@ build_endpoint_summary <- function(endpoint_name, endpoint_dir, result, feature_
 opt <- parse_standard_cli_args(
   defaults = cli_defaults,
   workflow_name = "single-cohort-survival",
-  help_printer = print_usage
+  help_printer = print_usage,
+  aliases = c(
+    subgroup_column = "group_column",
+    subgroup_filter = "group_filter"
+  )
 )
 opt$cut_months <- cli_parse_numeric_flag(opt$cut_months, "cut_months")
-opt$adjust_covariates <- cli_parse_enum_flag(
-  value = opt$adjust_covariates,
-  allowed_values = c("none", "subtype", "stage", "age", "subtype_stage", "subtype_age", "stage_age", "subtype_stage_age"),
-  flag_name = "adjust_covariates",
-  normalize = "lower"
-)
 feature_list <- cli_parse_csv_list(opt$features)
 endpoint_list <- cli_parse_csv_list(opt$endpoints, uppercase = TRUE)
 signature_genes <- cli_parse_csv_list(opt$signature_genes)
 include_groups <- cli_parse_csv_list(opt$include_groups, lowercase = TRUE)
+covariate_request <- parse_covariate_request(
+  value = opt$adjust_covariates,
+  subtype_column = opt$subtype_column,
+  stage_column = opt$stage_column,
+  age_column = opt$age_column,
+  race_column = opt$race_column
+)
 has_signature <- any(tolower(feature_list) == "signature")
 individual_features <- feature_list[tolower(feature_list) != "signature"]
 analysis_genes <- unique(c(individual_features, if (has_signature) signature_genes else character(0)))
@@ -142,10 +197,32 @@ metadata <- read_metadata_table(opt$meta_file)
 
 if (!opt$sample_column %in% names(metadata)) stop("Metadata missing sample column: ", opt$sample_column)
 
-subtype_clean <- tolower(trimws(opt$subtype_filter))
-subtype_filter_requested <- !(subtype_clean %in% c("", "all", "overall", "any"))
-subtype_adjustment_requested <- grepl("subtype", tolower(opt$adjust_covariates))
+group_filter_requested <- filter_requested(opt$group_filter)
+subtype_filter_requested <- filter_requested(opt$subtype_filter)
+group_column_requested <- nzchar(trimws(opt$group_column))
+subtype_adjustment_requested <- any(covariate_request$used_aliases == "subtype") || opt$subtype_column %in% covariate_request$columns
 has_subtype_column <- opt$subtype_column %in% names(metadata)
+
+if (group_filter_requested && !group_column_requested) {
+  stop("--group-filter requires --group-column.")
+}
+
+if (group_filter_requested && subtype_filter_requested) {
+  stop("Use either --group-filter/--group-column or --subtype-filter, not both in the same run.")
+}
+
+effective_group_column <- NULL
+effective_group_values <- character(0)
+effective_group_type <- if (nzchar(trimws(opt$group_type))) trimws(opt$group_type) else "subgroup"
+
+if (group_filter_requested) {
+  effective_group_column <- trimws(opt$group_column)
+  effective_group_values <- cli_parse_csv_list(opt$group_filter)
+} else if (subtype_filter_requested) {
+  effective_group_column <- opt$subtype_column
+  effective_group_values <- cli_parse_csv_list(opt$subtype_filter)
+  effective_group_type <- "subtype"
+}
 
 if (!has_subtype_column && subtype_filter_requested) {
   stop(
@@ -155,30 +232,33 @@ if (!has_subtype_column && subtype_filter_requested) {
   )
 }
 
-if (!has_subtype_column && subtype_adjustment_requested) {
-  stop(
-    "Metadata missing subtype column '", opt$subtype_column,
-    "'. subtype_column is optional unless subtype filtering or subtype-adjusted modeling is requested. ",
-    "Either provide --subtype-column for metadata that includes subtypes, or choose an --adjust-covariates mode without subtype."
-  )
+if (!is.null(effective_group_column) && !effective_group_column %in% names(metadata)) {
+  stop("Metadata missing group column: ", effective_group_column)
 }
 
 metadata_filtered <- metadata
 
-if (has_subtype_column && subtype_filter_requested) {
-  selected_subtypes <- cli_parse_csv_list(opt$subtype_filter)
-  metadata_filtered <- metadata_filtered %>% filter(.data[[opt$subtype_column]] %in% selected_subtypes)
+if (!is.null(effective_group_column) && length(effective_group_values)) {
+  metadata_filtered <- metadata_filtered %>% filter(.data[[effective_group_column]] %in% effective_group_values)
 }
 
 if (!nrow(metadata_filtered)) {
-  stop("No metadata rows remain after filtering. Check --subtype-filter and upstream dataset preparation.")
+  stop("No metadata rows remain after filtering. Check the active group filter and upstream dataset preparation.")
 }
 
 dir.create(opt$output_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(opt$output_dir, "logs"), recursive = TRUE, showWarnings = FALSE)
 
-covariates <- determine_covariates(opt$adjust_covariates, opt$subtype_column, opt$stage_column, opt$age_column)
-covariates <- covariates[covariates %in% names(metadata_filtered)]
+covariates_requested <- covariate_request$columns
+covariates <- covariates_requested[covariates_requested %in% names(metadata_filtered)]
+missing_covariates <- setdiff(covariates_requested, covariates)
+
+if (length(missing_covariates)) {
+  warning(
+    "Requested covariate columns not found in metadata and skipped: ",
+    paste(missing_covariates, collapse = ", ")
+  )
+}
 
 steps_to_run <- character(0)
 if (length(individual_features)) {
@@ -251,15 +331,23 @@ write_run_metadata_guardrail(
   parameters = list(
     sample_column = opt$sample_column,
     gene_column = opt$gene_column,
+    group_column = if (!is.null(effective_group_column)) effective_group_column else opt$group_column,
+    group_filter = if (length(effective_group_values)) paste(effective_group_values, collapse = ",") else opt$group_filter,
+    group_type = effective_group_type,
     subtype_column = opt$subtype_column,
     stage_column = opt$stage_column,
     age_column = opt$age_column,
+    race_column = opt$race_column,
     signature_genes = paste(signature_genes, collapse = ","),
     features = opt$features,
     endpoints = opt$endpoints,
     analysis_genes = paste(analysis_genes, collapse = ","),
     subtype_filter = opt$subtype_filter,
+    subgroup_column = if (!is.null(effective_group_column)) effective_group_column else opt$group_column,
+    subgroup_filter = if (length(effective_group_values)) paste(effective_group_values, collapse = ",") else opt$group_filter,
     adjust_covariates = opt$adjust_covariates,
+    covariates_requested = paste(covariates_requested, collapse = ","),
+    covariates_resolved = paste(covariates, collapse = ","),
     split_method = opt$split_method,
     include_groups = paste(include_groups, collapse = ","),
     steps_to_run = paste(steps_to_run, collapse = ","),

@@ -290,7 +290,7 @@ analyze_survival_expression <- function(
     
     data
   }
-  
+
   # Align expression to metadata samples
   get_expr_aligned <- function(gene, gene_mat, merged_base, available_samples) {
     if (!(gene %in% rownames(gene_mat))) {
@@ -416,17 +416,39 @@ analyze_survival_expression <- function(
     if (is.null(local_plot_params)) local_plot_params <- plot_params
     stats_mode <- local_plot_params$stats_panel_mode %||% "caption"
     if (getOption("km_debug", FALSE)) message("[draw_km_plot] stats_mode initial=", stats_mode)
-    if (length(levels(surv_df$cluster)) == 2) {
-      colors <- c(local_plot_params$color_low, local_plot_params$color_high)
-      labels <- c(local_plot_params$label_low, local_plot_params$label_high)
-    } else {
-      colors <- c(); labels <- c()
-      if ("A" %in% levels(surv_df$cluster)) { colors <- c(colors, local_plot_params$color_low); labels <- c(labels, local_plot_params$label_low) }
-      if ("B" %in% levels(surv_df$cluster)) { colors <- c(colors, local_plot_params$color_mid); labels <- c(labels, local_plot_params$label_mid) }
-      if ("C" %in% levels(surv_df$cluster)) { colors <- c(colors, local_plot_params$color_high); labels <- c(labels, local_plot_params$label_high) }
+    strata_levels <- character(0)
+    if (!is.null(fit$strata)) {
+      strata_levels <- sub("^.*=", "", names(fit$strata))
     }
+    if (!length(strata_levels)) {
+      strata_levels <- unique(as.character(stats::na.omit(surv_df$cluster)))
+    }
+    recognized_levels <- c("A", "B", "C")
+    if (length(strata_levels) && all(strata_levels %in% recognized_levels)) {
+      color_map <- c(
+        A = local_plot_params$color_low,
+        B = local_plot_params$color_mid,
+        C = local_plot_params$color_high
+      )
+      label_map <- c(
+        A = local_plot_params$label_low,
+        B = local_plot_params$label_mid,
+        C = local_plot_params$label_high
+      )
+      colors <- unname(color_map[strata_levels])
+      labels <- unname(label_map[strata_levels])
+    } else {
+      fallback_palette <- c(
+        local_plot_params$color_low,
+        local_plot_params$color_mid,
+        local_plot_params$color_high
+      )
+      colors <- fallback_palette[seq_along(strata_levels)]
+      labels <- strata_levels
+    }
+
     if (isTRUE(local_plot_params$include_sample_size)) {
-      group_sizes <- table(surv_df$cluster)[levels(surv_df$cluster)]
+      group_sizes <- table(factor(as.character(surv_df$cluster), levels = strata_levels))[strata_levels]
       labels <- paste0(labels, " (n = ", as.integer(group_sizes), ")")
     }
     p <- muffle_scale_messages(survminer::ggsurvplot(
@@ -967,7 +989,7 @@ analyze_survival_expression <- function(
         
         if (nrow(df_complete) < 10) return(NULL)
         
-        fit <- try(survival::coxph(as.formula(paste("Surv(time, event) ~", rhs)), 
+        fit <- try(survival::coxph(as.formula(paste("survival::Surv(time, event) ~", rhs)), 
                                   data = df_complete), silent = TRUE)
         if (inherits(fit, "try-error")) return(NULL)
         
@@ -1062,7 +1084,7 @@ analyze_survival_expression <- function(
         valid_covs_local <- intersect(clinical_covariates, 
                                       setdiff(colnames(surv_data), c("time", "event", "cluster")))
         if (length(valid_covs_local)) {
-          f_adj <- as.formula(paste("Surv(time, event) ~ cluster +", 
+          f_adj <- as.formula(paste("survival::Surv(time, event) ~ cluster +", 
                                    paste(valid_covs_local, collapse = " + ")))
           surv_adj <- surv_data[complete.cases(surv_data[, all.vars(f_adj)]), ]
           if (nrow(surv_adj) >= 10) {
@@ -1129,7 +1151,7 @@ analyze_survival_expression <- function(
             base_terms <- if (length(keep_covs_td) > 0) paste(keep_covs_td, collapse = " + ") else "1"
             td_terms <- paste0("cluster_", cluster_levels[-1], "_early", collapse = " + ")
             td_terms <- paste(td_terms, "+", paste0("cluster_", cluster_levels[-1], "_late", collapse = " + "))
-            fml_td <- as.formula(paste("Surv(time, event) ~", base_terms, "+", td_terms))
+            fml_td <- as.formula(paste("survival::Surv(time, event) ~", base_terms, "+", td_terms))
 
             td_fit_sig <- try(survival::coxph(fml_td, data = surv_sig_td), silent = TRUE)
             if (!inherits(td_fit_sig, "try-error")) {
@@ -1147,7 +1169,7 @@ analyze_survival_expression <- function(
         if ("signature+covariates" %in% steps_to_run && !is.null(clinical_covariates) && length(clinical_covariates) > 0) {
           valid_covs_local2 <- intersect(clinical_covariates, setdiff(colnames(surv_data), c("time","event","cluster","signature_score")))
           if (length(valid_covs_local2)) {
-            f_sig_cont_adj <- as.formula(paste("Surv(time, event) ~ signature_score +", paste(valid_covs_local2, collapse = " + ")))
+            f_sig_cont_adj <- as.formula(paste("survival::Surv(time, event) ~ signature_score +", paste(valid_covs_local2, collapse = " + ")))
             sig_cont_adj_fit <- try(survival::coxph(f_sig_cont_adj, data = surv_data), silent = TRUE)
             if (!inherits(sig_cont_adj_fit, "try-error")) sig_cont_adj_sum <- summary(sig_cont_adj_fit)
           }
@@ -1304,7 +1326,7 @@ analyze_survival_expression <- function(
             
             cox_early_adj <- NULL
             if (length(valid_covs_early) > 0 && nrow(early_data_complete) >= 10) {
-              fml_early <- as.formula(paste("Surv(time, event) ~ cluster +", 
+              fml_early <- as.formula(paste("survival::Surv(time, event) ~ cluster +", 
                                            paste(valid_covs_early, collapse = " + ")))
               cox_early_adj <- try(survival::coxph(fml_early, data = early_data_complete), silent = TRUE)
               if (inherits(cox_early_adj, "try-error")) cox_early_adj <- NULL
@@ -1312,7 +1334,7 @@ analyze_survival_expression <- function(
             
             cox_early_cont_adj <- NULL
             if (length(valid_covs_early) > 0 && nrow(early_data_complete) >= 10) {
-              fml_early_cont <- as.formula(paste("Surv(time, event) ~ signature_score +", 
+              fml_early_cont <- as.formula(paste("survival::Surv(time, event) ~ signature_score +", 
                                                  paste(valid_covs_early, collapse = " + ")))
               cox_early_cont_adj <- try(survival::coxph(fml_early_cont, data = early_data_complete), silent = TRUE)
               if (inherits(cox_early_cont_adj, "try-error")) cox_early_cont_adj <- NULL
@@ -1379,7 +1401,7 @@ analyze_survival_expression <- function(
             
             cox_late_adj <- NULL
             if (length(valid_covs_late) > 0 && nrow(late_data_complete) >= 10) {
-              fml_late <- as.formula(paste("Surv(time, event) ~ cluster +", 
+              fml_late <- as.formula(paste("survival::Surv(time, event) ~ cluster +", 
                                           paste(valid_covs_late, collapse = " + ")))
               cox_late_adj <- try(survival::coxph(fml_late, data = late_data_complete), silent = TRUE)
               if (inherits(cox_late_adj, "try-error")) cox_late_adj <- NULL
@@ -1387,7 +1409,7 @@ analyze_survival_expression <- function(
             
             cox_late_cont_adj <- NULL
             if (length(valid_covs_late) > 0 && nrow(late_data_complete) >= 10) {
-              fml_late_cont <- as.formula(paste("Surv(time, event) ~ signature_score +", 
+              fml_late_cont <- as.formula(paste("survival::Surv(time, event) ~ signature_score +", 
                                                 paste(valid_covs_late, collapse = " + ")))
               cox_late_cont_adj <- try(survival::coxph(fml_late_cont, data = late_data_complete), silent = TRUE)
               if (inherits(cox_late_cont_adj, "try-error")) cox_late_cont_adj <- NULL
@@ -1451,7 +1473,7 @@ analyze_survival_expression <- function(
           }
           
           if (length(valid_covs_filtered) > 0) {
-            fml <- as.formula(paste("Surv(time, event) ~ signature_score +", 
+            fml <- as.formula(paste("survival::Surv(time, event) ~ signature_score +", 
                                    paste(valid_covs_filtered, collapse = " + ")))
             
             model_data <- merged_with_sig[, c("time", "event", "signature_score", 
@@ -1508,7 +1530,7 @@ analyze_survival_expression <- function(
                     cat("Fitting early/late model with cutpoint at", cut_months, "months\n")
                     
                     # Fit time-dependent Cox model
-                    fml_tt <- as.formula(paste("Surv(time, event) ~", 
+                    fml_tt <- as.formula(paste("survival::Surv(time, event) ~", 
                                               paste(c(valid_covs_filtered, "tt(signature_score)"), 
                                                    collapse = " + ")))
                     
@@ -1652,9 +1674,13 @@ analyze_survival_expression <- function(
           ok <- vapply(keep_covs_here, function(cv) { v <- surv_gene[[cv]]; if (is.numeric(v)) { var(v, na.rm = TRUE) > 0 } else if (is.factor(v) || is.character(v)) { length(unique(na.omit(v))) > 1 } else FALSE }, logical(1))
           keep_covs_here <- keep_covs_here[ok]
           if (length(keep_covs_here)) {
-            fml_adj <- as.formula(paste("Surv(time, event) ~ cluster +", paste(keep_covs_here, collapse = " + ")))
-            cox_adj_try <- try(survival::coxph(fml_adj, data = surv_gene), silent = TRUE)
-            if (!inherits(cox_adj_try, "try-error")) { cox_adj <- summary(cox_adj_try) }
+            fml_adj <- as.formula(paste("survival::Surv(time, event) ~ cluster +", paste(keep_covs_here, collapse = " + ")))
+            surv_gene_adj <- surv_gene[, c("time", "event", "cluster", keep_covs_here), drop = FALSE]
+            surv_gene_adj <- surv_gene_adj[complete.cases(surv_gene_adj), , drop = FALSE]
+            cox_adj_try <- if (nrow(surv_gene_adj) >= 10) try(survival::coxph(fml_adj, data = surv_gene_adj), silent = TRUE) else NULL
+            if (!inherits(cox_adj_try, "try-error") && !is.null(cox_adj_try)) {
+              cox_adj <- summary(cox_adj_try)
+            }
           }
         }
       }
@@ -1673,9 +1699,14 @@ analyze_survival_expression <- function(
             }, logical(1))
             keep_covs_here2 <- keep_covs_here2[ok2]
             if (length(keep_covs_here2)) {
-              f_cont_adj <- as.formula(paste("Surv(time, event) ~ expr_g +", paste(keep_covs_here2, collapse=" + ")))
-              cont_adj_fit <- try(survival::coxph(f_cont_adj, data = surv_gene), silent = TRUE)
-              if (!inherits(cont_adj_fit, "try-error")) cont_adj_sum <- summary(cont_adj_fit)
+              f_cont_adj <- as.formula(paste("survival::Surv(time, event) ~ expr_val +", paste(keep_covs_here2, collapse=" + ")))
+              surv_gene_cont_adj <- surv_gene[, c("time", "event", keep_covs_here2), drop = FALSE]
+              surv_gene_cont_adj$expr_val <- expr_g
+              surv_gene_cont_adj <- surv_gene_cont_adj[complete.cases(surv_gene_cont_adj), , drop = FALSE]
+              cont_adj_fit <- if (nrow(surv_gene_cont_adj) >= 10) try(survival::coxph(f_cont_adj, data = surv_gene_cont_adj), silent = TRUE) else NULL
+              if (!inherits(cont_adj_fit, "try-error") && !is.null(cont_adj_fit)) {
+                cont_adj_sum <- summary(cont_adj_fit)
+              }
             }
           }
         }
@@ -1837,8 +1868,8 @@ analyze_survival_expression <- function(
       for (g in genes_to_plot) {
         # Build survival frame with expression for gene g
         if (!(g %in% rownames(gene_mat))) next
-        expr_g <- get_expr_aligned(g, gene_mat, merged_base, available_samples)
-        gene_df <- merged_base %>% dplyr::mutate(expr_val = expr_g)
+        expr_g <- get_expr_aligned(g, gene_mat, merged_with_sig, available_samples)
+        gene_df <- merged_with_sig %>% dplyr::mutate(expr_val = expr_g)
         # Early window truncation / event logic mirroring signature implementation
         early_gene <- gene_df %>%
           dplyr::mutate(
@@ -1893,9 +1924,13 @@ analyze_survival_expression <- function(
                 okc <- vapply(keep_covs, function(cv) { v<-df[[cv]]; if (is.numeric(v)) var(v,na.rm=TRUE)>0 else if (is.factor(v)||is.character(v)) length(unique(na.omit(v)))>1 else FALSE }, logical(1))
                 keep_covs <- keep_covs[okc]
                 if (length(keep_covs)) {
-                  f_adj <- as.formula(paste("Surv(time, event) ~ cluster +", paste(keep_covs, collapse=" + ")))
-                  cox_adj_try <- try(survival::coxph(f_adj, data = df), silent = TRUE)
-                  if (!inherits(cox_adj_try, "try-error")) cox_adj <- summary(cox_adj_try)
+                  f_adj <- as.formula(paste("survival::Surv(time, event) ~ cluster +", paste(keep_covs, collapse=" + ")))
+                  df_adj <- df[, c("time", "event", "cluster", keep_covs), drop = FALSE]
+                  df_adj <- df_adj[complete.cases(df_adj), , drop = FALSE]
+                  cox_adj_try <- if (nrow(df_adj) >= 10) try(survival::coxph(f_adj, data = df_adj), silent = TRUE) else NULL
+                  if (!inherits(cox_adj_try, "try-error") && !is.null(cox_adj_try)) {
+                    cox_adj <- summary(cox_adj_try)
+                  }
                 }
               }
             }
@@ -1910,9 +1945,13 @@ analyze_survival_expression <- function(
                 okc2 <- vapply(keep_covs2, function(cv) { v<-df[[cv]]; if (is.numeric(v)) var(v,na.rm=TRUE)>0 else if (is.factor(v)||is.character(v)) length(unique(na.omit(v)))>1 else FALSE }, logical(1))
                 keep_covs2 <- keep_covs2[okc2]
                 if (length(keep_covs2)) {
-                  f_cont_adj <- as.formula(paste("Surv(time, event) ~ expr_val +", paste(keep_covs2, collapse=" + ")))
-                  cont_adj_fit <- try(survival::coxph(f_cont_adj, data = df), silent = TRUE)
-                  if (!inherits(cont_adj_fit, "try-error")) cont_adj <- summary(cont_adj_fit)
+                  f_cont_adj <- as.formula(paste("survival::Surv(time, event) ~ expr_val +", paste(keep_covs2, collapse=" + ")))
+                  df_cont_adj <- df[, c("time", "event", "expr_val", keep_covs2), drop = FALSE]
+                  df_cont_adj <- df_cont_adj[complete.cases(df_cont_adj), , drop = FALSE]
+                  cont_adj_fit <- if (nrow(df_cont_adj) >= 10) try(survival::coxph(f_cont_adj, data = df_cont_adj), silent = TRUE) else NULL
+                  if (!inherits(cont_adj_fit, "try-error") && !is.null(cont_adj_fit)) {
+                    cont_adj <- summary(cont_adj_fit)
+                  }
                 }
               }
             }

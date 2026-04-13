@@ -144,3 +144,47 @@ This session moved the repository from an architectural assessment into a runnab
 - Removed the maintained primary-only sample filtering step from the single-cohort and pooled maintained drivers.
 - The maintained interface now assumes datasets are already post-filtered upstream and treats dataset labels as user-supplied titles through `dataset1_label` and `dataset2_label` for pooled outputs.
 - Any remaining primary-filter assumptions are now confined to legacy wrappers rather than the maintained workflows.
+
+## BRCA Validation and Generalization Follow-Up
+
+- Added BRCA-like validation inputs under test_data/ and validated the maintained single-cohort workflow on the requested four-gene signature `SAT1, SRM, ODC1, AMD1`.
+- Changed the maintained single-cohort defaults so `run_km_individual = true`, `save_plots = true`, and tertile grouping retains `low, mid, high` by default.
+- Fixed a KM plotting bug in the reusable core so legend labels and palette selection are derived from the actually fitted strata instead of assumed factor levels.
+- Confirmed the grouped tertile sample-count differences during BRCA validation:
+  - `1060` is the correct post-filter grouped analysis base after excluding zero-time rows.
+  - `956` is the correct adjusted-model complete-case basis for the AMD1 BRCA OS early-window fit.
+  - `707` was caused by the previous maintained `low/high`-only tertile default.
+  - `974` was a debug artifact from bypassing real pipeline filters.
+- Fixed the missing adjusted rows in maintained per-gene KM plots and early/late window plots by qualifying constructed formulas with `survival::Surv(...)` and by using explicit complete-case adjusted model frames in the reusable core.
+- Revalidated the BRCA AMD1 early-window figure after that fix and confirmed the adjusted rows now appear with the expected `N = 956` basis.
+- Compared the maintained AMD1 BRCA early-window adjusted results to the earlier legacy tertile figure and confirmed the residual HR and p-value differences were explained by a different covariate set:
+  - the legacy figure adjusted for `Diagnosis_Age`, `ajcc_pathologic_tumor_stage`, `race_collapsed`, and `Subtype`
+  - the earlier maintained run adjusted for `Diagnosis_Age`, `ajcc_pathologic_tumor_stage`, and `Subtype` only
+- Refactored the maintained single-cohort covariate interface so `--adjust-covariates` accepts explicit raw metadata column names, defaults to `none`, and skips missing requested columns with a warning.
+- Retained alias support for `subtype`, `stage`, `age`, and `race` only as a convenience layer, not as the primary generalization strategy.
+- Validated both paths after that refactor:
+  - a no-subtype smoke dataset now runs cleanly with default `none`
+  - the BRCA dataset runs with explicit raw column names such as `Diagnosis_Age,ajcc_pathologic_tumor_stage,race_collapsed,Subtype`
+
+## Generalization Work
+
+- Captured the next generalization themes explicitly for follow-up work:
+  - move toward dataset config files instead of an ever-growing CLI surface
+  - make endpoint definitions fully explicit per run rather than OS/PFI-shaped by default
+  - separate reusable preprocessing and recoding from the survival core
+  - generalize time-window and grouping behavior into explicit analysis configuration
+  - remove remaining subtype- and BRCA-shaped assumptions from reporting and pooled maintained workflows
+  - add a reusable preflight input-contract validator
+  - propagate the explicit-column covariate model into the other maintained drivers
+
+## Subgroup Generalization Follow-Up
+
+- Generalized the maintained single-cohort workflow from a subtype-only filtering mindset toward a reusable subgroup interface.
+- Added generic `group_column`, `group_filter`, and `group_type` flags to the maintained single-cohort driver while retaining `subtype_column` and `subtype_filter` as compatibility paths for existing subtype-oriented usage.
+- Validated that the generic group interface reproduces subtype-style filtering by running a BRCA Basal subgroup smoke test through `group_column = Subtype` and `group_filter = BRCA_Basal`.
+- Added reusable subgroup forest plotting helpers to `src/utilities/reporting_helpers.R` so downstream forest plots can consume any shared subgroup-summary table without assuming BRCA subtype semantics.
+- Added a new maintained downstream workflow `drivers/run_subgroup_forest_bundle.R` and registered it in `entrypoint.R` as `subgroup-forest-bundle`.
+- Designed the new subgroup forest workflow around the shared subgroup-summary contract rather than a subtype-specific contract, so `subgroup_type` can represent subtype, responder status, Gleason risk, or any other cohorting scheme.
+- Validated the new subgroup forest workflow against the existing `test_data/single_cohort_subgroup_summary.csv` fixture and confirmed it writes figure and table outputs under `results/validation_subgroup_forest_bundle`.
+- Updated README guidance and examples to describe subgroup-oriented usage explicitly rather than treating subtype as the only meaningful cohorting pattern.
+- Confirmed the main remaining gap for full subgroup automation is an aggregator that converts a directory of per-group single-cohort runs into one consolidated subgroup summary table in the shared contract.
