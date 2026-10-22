@@ -32,10 +32,9 @@ Use the GBM/LGG p53beta field report and fixture tables to generalize the surviv
 ## Candidate Work Items
 
 - Continue to investigate the underlying `renv/activate.R` hang; the repository now has a documented noninteractive-safe runner as a workaround.
-- Add a maintained aggregator that converts multiple single-cohort pipeline run outputs into the shared subgroup-summary contract.
-- Add maintained support for signature-by-group interaction models in a single-cohort run plan.
+- Extend analysis-plan fixtures beyond the synthetic smoke cohort and validate their contract behavior with larger synthetic data when available.
 - Extend `subgroup-forest-bundle` examples and tests to cover the GBM/LGG adjusted-effect and interaction fixture tables.
-- Consider a config-driven run plan for combined, subgroup, and interaction models.
+- The maintained `single-cohort-analysis-plan` workflow now provides the config-driven run-plan boundary for combined, subgroup, and interaction models without encoding GBM/LGG logic.
 
 ## Validation Targets
 

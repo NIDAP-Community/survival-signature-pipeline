@@ -28,6 +28,7 @@ The repository currently has one strong reusable core, a small but real utility 
 - src/utilities/cli_helpers.R contains the small shared maintained-driver CLI and pre-load utility layer.
 - drivers/ contains the maintained pooled and piecewise workflows.
 - drivers/ now also contains a maintained single-cohort analysis workflow that runs through the reusable core.
+- drivers/ contains a maintained declarative single-cohort analysis-plan workflow for generic adjusted, subgroup, and interaction Cox models.
 - drivers/ also contains maintained downstream reporting workflows for single-cohort and pooled reporting bundles.
 - src/drivers/ contains older HTML-oriented and report-oriented wrappers that still depend on the reusable core.
 - entrypoint.R is the canonical root CLI surface and dispatches to maintained workflows.
@@ -91,6 +92,7 @@ The maintained driver layer now has two categories:
 
 - pooled two-dataset workflows for independent or comparable cohort comparisons
 - a single-cohort workflow for one dataset at a time, using the reusable core directly
+- a declarative single-cohort analysis-plan workflow for a prepared cohort with explicit covariates, filters, subgroup effects, and interaction tests
 
 Biologically distinct disease-state comparisons, such as GBM versus LGG, should not be forced into the pooled two-dataset workflow by default. Those analyses need a single-cohort or pan-disease-style design with explicit covariates, subgroup analyses, and interaction tests for major biological axes such as IDH mutation status.
 
@@ -126,7 +128,7 @@ The current cleanup wave follows these rules:
 - scripts/ is still empty
 - src/drivers/ has not been moved or archived yet
 - the maintained pooled summary workflows still require explicit upstream result tables
-- the maintained workflow layer still needs a general single-cohort stratified survival mode with configurable covariates, subgroup-specific models, and signature-by-group interaction tests
+- planned analyses currently support continuous gene and mean-expression signature effects; grouped KM-style effects remain the responsibility of `single-cohort-survival`
 - broader cohort generalization should avoid overloading two-dataset interaction workflows for biologically distinct disease groups such as GBM versus LGG
 
 ## Expected Flow

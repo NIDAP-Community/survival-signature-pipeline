@@ -1,0 +1,5 @@
+analysis_id,analysis_type,feature,feature_type,signature_genes,endpoint,covariates,filter_column,filter_values,subgroup_type,subgroup_label,interaction_column,interaction_reference,interaction_label,event_column,time_column
+overall_gene_d,overall,GENE_D,gene,,OS,Diagnosis_Age,,,overall,All eligible samples,,,,,
+overall_synthetic_signature,overall,Synthetic two-gene score,signature,"GENE_A,GENE_B",OS,,,,overall,All eligible samples,,,,,
+subgroup_example,subgroup,GENE_D,gene,,OS,Diagnosis_Age,Subtype,BRCA_Basal,example_group,Example group,,,,,
+interaction_example,interaction,GENE_D,gene,,OS,,,,,,Subtype,BRCA_Basal,Example group,,

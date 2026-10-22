@@ -1,5 +1,8 @@
 # 2026-04-29
 
+- added `single-cohort-analysis-plan`, a generic CSV-driven maintained workflow for overall, filtered-subgroup, and feature-by-group interaction Cox models
+- added a documented analysis-plan schema with explicit optional endpoint mappings, signature definitions, covariates, filters, and interaction references
+- emit analysis-plan primary effects and interaction terms through the shared subgroup-summary contract, with per-row status and full-coefficient outputs
 - added `scripts/run_rscript_project.sh`, a noninteractive-safe local runner that bypasses a hanging renv autoloader while requiring the restored project library rather than silently using global packages
 - documented `Rscript --vanilla` restoration and the project runner for reliable command-line execution
 - shell-quoted root-entrypoint child arguments so quoted workflow values containing spaces survive `system2()` forwarding

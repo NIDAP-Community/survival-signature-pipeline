@@ -1,5 +1,24 @@
 # Decision Log
 
+## 2026-10-22: Use a Declarative Plan for Generic Single-Cohort Effect and Interaction Models
+
+Decision:
+
+- Add `single-cohort-analysis-plan` as the maintained single-cohort automation path for planned continuous-feature Cox models.
+- Keep combined effects, filtered subgroup effects, and feature-by-group interaction tests as explicit plan row types rather than hard-coding disease names, covariate names, or group definitions.
+- Emit only primary continuous feature effects for overall/subgroup models and only feature-by-group coefficients for interaction models into the shared subgroup-summary contract.
+
+Rationale:
+
+- A prepared cohort may require a coordinated analysis set, but its scientific axes belong in versioned input configuration rather than reusable pipeline code.
+- Subgroup estimates and interaction tests answer distinct questions and need to remain distinct in downstream figures and tables.
+- The separate two-dataset pooled workflows retain their intended role for independent comparable cohorts.
+
+Current effect:
+
+- A CSV plan can define signatures, covariates, filters, interaction references, and nonstandard endpoint mappings using raw input-column names.
+- The run writes resolved-plan, row-status, full-coefficient, and shared-summary artifacts under its run-scoped output directory.
+
 ## 2026-05-20: Treat GBM/LGG as Glioma Disease States, Not Two Independent Validation Datasets
 
 Decision:

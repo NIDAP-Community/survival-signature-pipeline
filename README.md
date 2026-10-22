@@ -109,6 +109,7 @@ They also now share a small maintained-driver utility layer in src/utilities/cli
 The maintained reporting workflows still remain separate:
 
 - run_single_cohort_reporting_bundle.R handles single-cohort downstream summaries and optional subgroup heatmaps
+- run_single_cohort_analysis_plan.R executes declarative overall, subgroup, and interaction models for one cohort
 - run_finalized_pooled_results_bundle.R handles pooled two-dataset downstream forest plots, subtype heatmaps, and manuscript-style reporting outputs
 
 ### Legacy layer
@@ -295,6 +296,7 @@ Use the maintained workflows according to the analysis shape you need.
 
 - Use `single-cohort-survival` when you have one dataset and want to run the reusable core analysis engine directly.
 - Use `single-cohort-reporting-bundle` when you already have a completed single-cohort run directory and want an overall forest summary, plus an optional subgroup heatmap if you supply subgroup rows explicitly.
+- Use `single-cohort-analysis-plan` when one prepared cohort needs a reproducible, declarative set of adjusted overall effects, filtered subgroup effects, and formal feature-by-group interaction tests. The plan uses generic metadata columns and values; it does not encode project-specific disease logic.
 - Use `subgroup-forest-bundle` when you already have subgroup summary rows in the shared contract and want a generic forest plot across any cohorting scheme, not only cancer subtype.
 - Use `piecewise-dataset-interaction` when you have two harmonized datasets and want pooled piecewise modeling with dataset interaction terms.
 - Use `piecewise-subtype-specific` when you have two harmonized datasets and want pooled piecewise modeling within subtype strata. This workflow also emits a standardized subgroup summary table for downstream heatmaps.
@@ -403,6 +405,20 @@ The shared subgroup-summary contract for downstream heatmaps uses these columns:
 Additional columns such as dataset, window, model, or covariates may be present and are preserved when available.
 
 The maintained code should treat these as generic subgroup rows, not inherently subtype rows. `subgroup_type` can be values such as `subtype`, `response_status`, `gleason_risk`, or any other cohorting definition that is meaningful for the dataset at hand.
+
+### Declarative Single-Cohort Analysis Plans
+
+`single-cohort-analysis-plan` is the maintained producer for a planned collection of overall, subgroup, and interaction Cox models from one prepared cohort. It writes adjusted feature-effect and interaction rows directly into the shared subgroup-summary contract, while keeping the two result types distinct through `subgroup_type`.
+
+```bash
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-analysis-plan \
+  --expr-file test_data/tcga_expression.tsv \
+  --meta-file test_data/tcga_metadata.csv \
+  --plan-file test_data/single_cohort_analysis_plan.csv \
+  --output-dir results/analysis_plan_smoke
+```
+
+The plan contract is documented in [`docs/analysis_plan_contract.md`](docs/analysis_plan_contract.md). Its required fields are only `analysis_id`, `analysis_type`, `feature`, and `endpoint`; all cohort-specific filters, covariates, interaction axes, signatures, and nonstandard endpoint mappings are optional plan columns. The bundled plan is synthetic interface coverage, not an analysis template for a specific disease.
 
 ```bash
 Rscript entrypoint.R signature-consistency-summary \

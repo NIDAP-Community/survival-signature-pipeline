@@ -46,6 +46,7 @@ This command exercises a real maintained workflow through entrypoint.R while als
 - single_cohort_subgroup_summary.csv
 - gbm_lgg_p53beta_adjusted_effects_subgroup_summary.csv
 - gbm_lgg_p53beta_interactions_subgroup_summary.csv
+- single_cohort_analysis_plan.csv
 
 ## Example Commands
 
@@ -145,6 +146,20 @@ RENV_CONFIG_AUTOLOADER_ENABLED=FALSE Rscript entrypoint.R subgroup-forest-bundle
 ```
 
 These GBM/LGG fixtures are real field-report tables from an external p53beta signature project. They are intended for reporting-interface and generalization tests, not for standalone scientific interpretation inside this repository.
+
+## Declarative Analysis-Plan Smoke Test
+
+`single_cohort_analysis_plan.csv` is a synthetic interface fixture for the maintained `single-cohort-analysis-plan` workflow. It covers a continuous gene effect, a mean-expression signature effect, a filtered-group effect, and a feature-by-group interaction without adding project-specific logic to the driver.
+
+```bash
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-analysis-plan \
+  --expr-file test_data/tcga_expression.tsv \
+  --meta-file test_data/tcga_metadata.csv \
+  --plan-file test_data/single_cohort_analysis_plan.csv \
+  --output-dir results/analysis_plan_smoke
+```
+
+See `docs/analysis_plan_contract.md` for the general plan schema and output contract.
 
 ## Subtype Guardrail Validation Matrix
 

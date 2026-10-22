@@ -207,7 +207,14 @@ This session moved the repository from an architectural assessment into a runnab
   - `gbm_lgg_p53beta_interactions_subgroup_summary.csv`
 - Recorded that normal `Rscript` in this repo can hang during `.Rprofile`/`renv` startup on this system, while `Rscript --vanilla` and `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE Rscript ...` run the forest driver successfully.
 - Recorded that `entrypoint.R` argument forwarding can be fragile for long quoted label strings with spaces; direct driver invocation avoided that issue.
-- Confirmed the next pipeline-development need is a maintained single-cohort run-plan layer that can emit adjusted-effect and interaction rows into the shared subgroup-summary contract.
+- Confirmed the next pipeline-development need was a maintained single-cohort run-plan layer that could emit adjusted-effect and interaction rows into the shared subgroup-summary contract.
+
+## Declarative Single-Cohort Analysis-Plan Follow-Up
+
+- Added `single-cohort-analysis-plan`, a maintained CSV-driven workflow for generic overall, filtered-subgroup, and feature-by-group interaction Cox models.
+- Kept disease-specific definitions out of code: the plan supplies metadata columns, values, covariates, signature members, endpoint mappings, and interaction axes.
+- Wrote continuous adjusted effects and interaction terms directly into the shared subgroup-summary contract, with `interaction_model` preserving the distinction between effect estimates and effect-modification tests.
+- Added an explicit plan contract, a synthetic interface fixture, run-level status reporting, full coefficients, and a root-entrypoint smoke path.
 
 ## Runtime Reliability Follow-Up
 
