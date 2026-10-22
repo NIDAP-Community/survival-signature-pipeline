@@ -30,6 +30,7 @@ cli_defaults <- list(
   subtype_filter = "ALL",
   adjust_covariates = "none",
   split_method = "tertiles",
+  detection_threshold = "0",
   include_groups = "low,mid,high",
   features = "Signature,GENE_A,GENE_B,GENE_C,GENE_D",
   endpoints = "OS,PFI",
@@ -52,6 +53,7 @@ print_usage <- function() {
       "subtype_column/subtype_filter are retained as compatibility flags for subtype-shaped datasets.",
       "Inputs are expected to be post-filtered upstream; the maintained driver does not apply an internal primary-only sample filter.",
       "adjust_covariates should generally be supplied as explicit metadata column names for the current dataset.",
+      "split_method=detectable performs a binary gene grouping using expression <= detection_threshold versus > detection_threshold.",
       "Optional aliases are supported as a convenience only: subtype, stage, age, race.",
       "Requested covariates missing from a dataset are skipped automatically; active group filtering requires the chosen group column."
     ),
@@ -124,6 +126,20 @@ filter_requested <- function(value) {
   !(tolower(trimws(as.character(value))) %in% c("", "all", "overall", "any"))
 }
 
+normalize_include_groups <- function(include_groups, split_method) {
+  if (split_method != "detectable") {
+    return(include_groups)
+  }
+
+  normalized <- dplyr::case_when(
+    include_groups %in% c("undetectable", "undet") ~ "low",
+    include_groups %in% c("detectable", "det") ~ "high",
+    TRUE ~ include_groups
+  )
+
+  unique(normalized)
+}
+
 build_endpoint_summary <- function(endpoint_name, endpoint_dir, result, feature_list, covariate_mode) {
   lines <- c(
     paste0("# ", endpoint_name, " Single-Cohort Summary"),
@@ -153,6 +169,127 @@ build_endpoint_summary <- function(endpoint_name, endpoint_dir, result, feature_
   write_simple_markdown(lines, file.path(endpoint_dir, paste0(endpoint_name, "_summary.md")))
 }
 
+write_grouped_gene_results <- function(endpoint_name, endpoint_dir, result) {
+  grouped_df <- result$results_grouped_gene
+  if (is.null(grouped_df) || !nrow(grouped_df)) {
+    return(invisible(NULL))
+  }
+
+  grouped_df <- grouped_df %>%
+    mutate(endpoint = endpoint_name) %>%
+    select(
+      endpoint,
+      feature,
+      comparison,
+      reference_group,
+      comparison_group,
+      HR,
+      CI_lower,
+      CI_upper,
+      p_value,
+      N,
+      events,
+      model_type,
+      covariates_requested,
+      covariates_retained
+    )
+
+  readr::write_csv(grouped_df, file.path(endpoint_dir, "grouped_gene_cox_results.csv"))
+}
+
+write_adjusted_model_full_coefficients <- function(endpoint_name, endpoint_dir, result) {
+  primary_features <- unique(c(
+    if (!is.null(result$results_univariate)) result$results_univariate$Gene else character(0),
+    if (!is.null(result$results_adjusted)) result$results_adjusted$Gene else character(0)
+  ))
+  plot_names <- intersect(names(result$plots), primary_features)
+  if (!length(plot_names)) {
+    return(invisible(NULL))
+  }
+
+  extract_rows <- function(model_summary, feature_name, model_name, split_method,
+                           requested_covariates, retained_covariates) {
+    if (is.null(model_summary) || is.null(model_summary$coefficients) || !nrow(model_summary$coefficients)) {
+      return(NULL)
+    }
+
+    coefficient_names <- rownames(model_summary$coefficients)
+    term_labels <- vapply(coefficient_names, function(term_name) {
+      if (model_name == "grouped_adjusted") {
+        if (split_method == "detectable" && term_name == "clusterC") {
+          return("Detectable vs Undetectable")
+        }
+        if (term_name == "clusterC") {
+          return("High vs Low")
+        }
+        if (term_name == "clusterB") {
+          return("Mid vs Low")
+        }
+      }
+
+      if (model_name == "continuous_adjusted" && term_name == "expr_val") {
+        return(feature_name)
+      }
+
+      term_name
+    }, character(1))
+
+    data.frame(
+      endpoint = endpoint_name,
+      feature = feature_name,
+      model = model_name,
+      term = term_labels,
+      coef = unname(model_summary$coefficients[, "coef"]),
+      HR = unname(model_summary$conf.int[, "exp(coef)"]),
+      CI_lower = unname(model_summary$conf.int[, "lower .95"]),
+      CI_upper = unname(model_summary$conf.int[, "upper .95"]),
+      p_value = unname(model_summary$coefficients[, "Pr(>|z|)"]),
+      N = model_summary$n,
+      events = model_summary$nevent,
+      covariates_requested = if (length(requested_covariates)) paste(requested_covariates, collapse = ",") else "none",
+      covariates_retained = if (length(retained_covariates)) paste(retained_covariates, collapse = ",") else "none",
+      stringsAsFactors = FALSE,
+      row.names = NULL
+    )
+  }
+
+  coefficient_rows <- lapply(plot_names, function(feature_name) {
+    plot_obj <- result$plots[[feature_name]]
+    if (is.null(plot_obj$cox_adj) && is.null(plot_obj$cont_adj)) {
+      return(NULL)
+    }
+
+    requested_covariates <- plot_obj$covariates_requested %||% character(0)
+    split_method <- plot_obj$split_method %||% NA_character_
+
+    dplyr::bind_rows(
+      extract_rows(
+        model_summary = plot_obj$cox_adj,
+        feature_name = feature_name,
+        model_name = "grouped_adjusted",
+        split_method = split_method,
+        requested_covariates = requested_covariates,
+        retained_covariates = plot_obj$covariates_retained_grouped %||% character(0)
+      ),
+      extract_rows(
+        model_summary = plot_obj$cont_adj,
+        feature_name = feature_name,
+        model_name = "continuous_adjusted",
+        split_method = split_method,
+        requested_covariates = requested_covariates,
+        retained_covariates = plot_obj$covariates_retained_continuous %||% character(0)
+      )
+    )
+  })
+
+  coefficient_rows <- Filter(Negate(is.null), coefficient_rows)
+  if (!length(coefficient_rows)) {
+    return(invisible(NULL))
+  }
+
+  readr::write_csv(dplyr::bind_rows(coefficient_rows), file.path(endpoint_dir, "adjusted_model_full_coefficients.csv"))
+}
+
 opt <- parse_standard_cli_args(
   defaults = cli_defaults,
   workflow_name = "single-cohort-survival",
@@ -163,10 +300,18 @@ opt <- parse_standard_cli_args(
   )
 )
 opt$cut_months <- cli_parse_numeric_flag(opt$cut_months, "cut_months")
+opt$detection_threshold <- cli_parse_numeric_flag(opt$detection_threshold, "detection_threshold")
+opt$split_method <- cli_parse_enum_flag(
+  opt$split_method,
+  allowed_values = c("tertiles", "quartiles", "median", "percentiles", "detectable"),
+  flag_name = "split_method",
+  normalize = "lower"
+)
 feature_list <- cli_parse_csv_list(opt$features)
 endpoint_list <- cli_parse_csv_list(opt$endpoints, uppercase = TRUE)
 signature_genes <- cli_parse_csv_list(opt$signature_genes)
 include_groups <- cli_parse_csv_list(opt$include_groups, lowercase = TRUE)
+include_groups <- normalize_include_groups(include_groups, opt$split_method)
 covariate_request <- parse_covariate_request(
   value = opt$adjust_covariates,
   subtype_column = opt$subtype_column,
@@ -182,6 +327,14 @@ assert_output_guardrails(opt$output_dir)
 
 if (!length(analysis_genes)) {
   stop("No analyzable genes resolved from --features and --signature-genes.")
+}
+
+if (!all(include_groups %in% c("low", "mid", "high"))) {
+  stop("--include-groups must resolve to low, mid, and/or high. For split_method=detectable, Undetectable/Detectable aliases are also accepted.")
+}
+
+if (opt$split_method == "detectable" && has_signature) {
+  stop("split_method=detectable currently supports individual gene features only. Remove Signature from --features for this run.")
 }
 
 cli_assert_existing_input_files(
@@ -293,6 +446,7 @@ for (endpoint_name in endpoint_list) {
     time_col = endpoint_columns$time,
     clinical_covariates = covariates,
     split_method = opt$split_method,
+    detection_threshold = opt$detection_threshold,
     include_groups = include_groups,
     steps_to_run = steps_to_run,
     run_lasso = is_truthy(opt$run_lasso),
@@ -308,6 +462,8 @@ for (endpoint_name in endpoint_list) {
 
   saveRDS(result, file = file.path(endpoint_dir, paste0(endpoint_name, "_results.rds")))
   build_endpoint_summary(endpoint_name, endpoint_dir, result, feature_list, opt$adjust_covariates)
+  write_grouped_gene_results(endpoint_name, endpoint_dir, result)
+  write_adjusted_model_full_coefficients(endpoint_name, endpoint_dir, result)
 
   results_manifest[[length(results_manifest) + 1]] <- data.frame(
     endpoint = endpoint_name,
@@ -349,6 +505,7 @@ write_run_metadata_guardrail(
     covariates_requested = paste(covariates_requested, collapse = ","),
     covariates_resolved = paste(covariates, collapse = ","),
     split_method = opt$split_method,
+    detection_threshold = opt$detection_threshold,
     include_groups = paste(include_groups, collapse = ","),
     steps_to_run = paste(steps_to_run, collapse = ","),
     cut_months = opt$cut_months,

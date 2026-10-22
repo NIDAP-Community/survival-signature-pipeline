@@ -206,6 +206,78 @@ Examples:
 
 Requested covariates that are not present in a particular dataset are skipped automatically with a warning, which makes the maintained single-cohort workflow usable across datasets with partially overlapping metadata.
 
+For maintained single-cohort runs that need a true detectable-versus-undetectable gene comparison, use `--split-method detectable` with `--detection-threshold <value>`. In this mode, samples with expression less than or equal to the threshold are labeled `Undetectable` and samples above the threshold are labeled `Detectable`. This mode is currently intended for individual gene features rather than `Signature`.
+
+### Maintained Single-Cohort Quick Reference
+
+If an external coding agent such as Codex is driving this repository, prefer the maintained `single-cohort-survival` workflow through `entrypoint.R` rather than calling older scripts in `src/drivers/`.
+
+Use this workflow when all of the following are true:
+
+- you have one expression matrix and one metadata table for one cohort
+- you want per-gene and optionally signature-based survival analysis through the maintained path
+- you want outputs written to one run-scoped directory under `results/`
+
+Minimum required inputs for `single-cohort-survival`:
+
+- expression table with genes in rows, samples in columns, and one gene identifier column
+- metadata table with one sample identifier column
+- one event column and one time column for each requested endpoint
+
+Minimum flags that should usually be made explicit:
+
+- `--expr-file`
+- `--meta-file`
+- `--features`
+- `--endpoints`
+- `--adjust-covariates`
+- `--output-dir`
+
+Common optional flags that change cohort scope:
+
+- `--group-column` and `--group-filter` for maintained subgroup filtering
+- `--sample-column` if the metadata sample ID column is not `sampnames`
+- `--gene-column` if the expression gene ID column is not `Gene`
+
+Important maintained constraints:
+
+- inputs are expected to be post-filtered upstream; the maintained driver does not apply a primary-only tumor filter internally
+- `--adjust-covariates` should usually be a comma-separated list of raw metadata column names, or `none`
+- supported maintained endpoints are currently `OS` and `PFI`
+- `--split-method detectable` is for individual genes, not `Signature`
+- detectability grouping uses raw expression values for the thresholded split, while continuous Cox summaries still use the standardized modeling path already used by the repo
+- `--include-groups low,high` remains the canonical interface; in detectability mode the maintained driver also accepts `Undetectable,Detectable` and maps them to the same internal groups
+
+Detectability mode contract:
+
+- `--split-method detectable`
+- `--detection-threshold <numeric>`
+- samples with expression `<= detection_threshold` are labeled `Undetectable`
+- samples with expression `> detection_threshold` are labeled `Detectable`
+- `--include-groups low,high` and `--include-groups Undetectable,Detectable` are equivalent in this mode
+- use `--features TP53B` or another explicit gene symbol, not `Signature`
+
+Expected outputs under `<output-dir>/<endpoint>/` include:
+
+- `results_univariate.csv`
+- `grouped_gene_cox_results.csv`
+- `adjusted_model_full_coefficients.csv`
+- `<endpoint>_results.rds`
+- `<endpoint>_summary.md`
+- KM plot PNGs for the requested genes when plotting is enabled
+
+`grouped_gene_cox_results.csv` is the maintained machine-readable export for grouped per-gene Cox comparisons. For detectability runs it writes explicit `reference_group = Undetectable` and `comparison_group = Detectable`, along with `model_type`, `N`, `events`, `covariates_requested`, and `covariates_retained`.
+
+`adjusted_model_full_coefficients.csv` is the maintained machine-readable export for full adjusted Cox coefficient tables. It includes every coefficient retained in the grouped adjusted and continuous adjusted per-gene models, including covariate effects such as age, grade, histology, or sex when those columns are used in the fitted model.
+
+For a question such as "TP53B detectable vs undetectable within LGG IDH-mutant tumors", the maintained pattern is:
+
+1. prepare or filter the metadata so the cohort definition is explicit, or use `--group-column IDH_status --group-filter Mutant` if the metadata already carries that subgroup column
+2. run `single-cohort-survival` with `--features TP53B`
+3. set `--split-method detectable --detection-threshold 0`
+4. choose `--endpoints OS` or `--endpoints OS,PFI` depending on the available metadata columns
+5. pass raw metadata column names to `--adjust-covariates`, or use `none` for an unadjusted first pass
+
 ### Feature assumptions
 
 Several drivers hard-code a placeholder four-feature signature:
@@ -263,6 +335,19 @@ Rscript entrypoint.R single-cohort-survival \
   --endpoints OS \
   --features Signature \
   --adjust-covariates Diagnosis_Age,ajcc_pathologic_tumor_stage,race_collapsed,Subtype
+```
+
+```bash
+Rscript entrypoint.R single-cohort-survival \
+  --expr-file <expr.tsv> \
+  --meta-file <meta.csv> \
+  --group-column IDH_status \
+  --group-filter Mutant \
+  --features TP53B \
+  --endpoints OS \
+  --split-method detectable \
+  --detection-threshold 0 \
+  --adjust-covariates none
 ```
 
 ```bash
@@ -427,6 +512,13 @@ The test_data/ files are intended for smoke testing and interface validation, no
 - entrypoint dispatch
 - output directory creation
 - provenance metadata generation
+
+The repository also includes GBM/LGG p53beta field-report fixtures for the generic subgroup forest workflow:
+
+- test_data/gbm_lgg_p53beta_adjusted_effects_subgroup_summary.csv
+- test_data/gbm_lgg_p53beta_interactions_subgroup_summary.csv
+
+These fixtures came from an external glioma signature analysis and are documented in docs/case_studies/gbm_lgg_p53beta_survival.md. They are meant to help future pipeline work test single-cohort subgroup and interaction reporting without forcing biologically distinct disease states into the two-dataset pooled workflow.
 
 See test_data/README.md for example commands.
 

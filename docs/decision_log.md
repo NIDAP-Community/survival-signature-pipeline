@@ -1,5 +1,26 @@
 # Decision Log
 
+## 2026-05-20: Treat GBM/LGG as Glioma Disease States, Not Two Independent Validation Datasets
+
+Decision:
+
+- Do not force GBM versus LGG analyses into the same conceptual role as TCGA-BRCA versus METABRIC pooled validation.
+- Treat GBM and LGG as biologically distinct glioma disease states within a diffuse glioma disease spectrum.
+- Treat IDH mutation status as a major covariate and subgroup axis for glioma survival analyses.
+- Do not label AJCC or clinical stage adjustment for GBM/LGG unless a true stage field is present; disease group or histologic grade must be labeled as a stage proxy when used.
+
+Rationale:
+
+- TCGA-BRCA and METABRIC represent different cohorts of the same broad disease setting, while GBM and LGG represent different glioma disease states with strong biological and prognostic differences.
+- IDH mutation status is central to glioma prognosis and cannot be treated as a secondary annotation.
+- The available GBM/LGG clinical metadata do not contain usable AJCC or clinical stage, so using disease group or histologic grade without clear labeling would overstate the clinical meaning of the covariate.
+- A combined GBM/LGG analysis should ask whether a signature carries information beyond glioma disease structure, and subgroup analyses should test whether the effect is present within clinically coherent strata.
+
+Current effect:
+
+- The durable development direction is to improve the maintained single-cohort/subgroup workflow rather than overloading the two-dataset pooled workflow for biologically distinct disease groups.
+- Planned GBM/LGG p53beta-WT signature survival runs should document the precomputed `p53b_WT_up_all_no_TP53` GSVA score, age, IDH status, disease group or subtype covariates, stage-proxy handling, and subgroup-model eligibility in run metadata.
+
 ## 2026-04-08: Standardize Around One Maintained Root CLI
 
 Decision:
@@ -348,3 +369,24 @@ Current effect:
 
 - drivers/run_single_cohort_survival.R, drivers/run_piecewise_dataset_interaction.R, and drivers/run_piecewise_subtype_specific.R no longer apply an internal primary-only sample filter.
 - Any remaining primary-filter logic is now limited to legacy wrappers under src/drivers/.
+
+## 2026-05-21: Capture GBM/LGG p53beta as a Pipeline Generalization Field Report
+
+Decision:
+
+- Preserve the GBM/LGG p53beta survival run as a case-study artifact and regression fixture for future pipeline generalization work.
+- Use the case study to motivate generic single-cohort combined/subgroup/interaction support rather than adding a GBM/LGG-specific branch.
+- Treat interaction-model output as a separate downstream reporting class from subgroup-specific survival effects.
+
+Rationale:
+
+- The external GBM/LGG project exposed real reuse needs that the BRCA/METABRIC examples did not stress: biologically distinct disease states, central IDH biology, TP53 mutation status as an additional covariate/subgroup, and interaction tests.
+- The shared subgroup-summary contract worked well as a downstream boundary for both adjusted-effect and interaction forest plots.
+- Real field-report fixtures make future optimization work more concrete than synthetic examples alone.
+
+Current effect:
+
+- Added `docs/case_studies/gbm_lgg_p53beta_survival.md`.
+- Added `docs/agent_handoff_gbm_lgg_lessons.md`.
+- Added GBM/LGG p53beta adjusted-effect and interaction fixture tables under `test_data/`.
+- No changelog entry is needed yet because this records field lessons and fixtures, not a formal behavior change.

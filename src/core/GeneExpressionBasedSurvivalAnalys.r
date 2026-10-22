@@ -13,8 +13,9 @@
 #' @param event_col Character. Column name for event indicator (1=event, 0=censored or "dead"/"alive").
 #' @param time_col Character. Column name for survival/follow-up time.
 #' @param clinical_covariates Character vector. Column names of clinical covariates to adjust for.
-#' @param split_method Character. Method to split samples: "median", "quartiles", or "percentiles".
+#' @param split_method Character. Method to split samples: "median", "quartiles", "tertiles", "percentiles", or "detectable".
 #' @param percentile_cutoffs Numeric vector of length 2. Percentile cutoffs if split_method="percentiles".
+#' @param detection_threshold Numeric. Expression threshold used when split_method="detectable".
 #' @param include_groups Character vector. Which groups to include: "low", "mid", "high".
 #' @param steps_to_run Character vector. Analysis steps to perform. Options:
 #'   "individual+covariates", "individual", "signature+covariates", "signature",
@@ -34,6 +35,7 @@
 #' @return A list containing:
 #'   \item{results_univariate}{Data frame with univariate Cox results per gene}
 #'   \item{results_adjusted}{Data frame with covariate-adjusted Cox results per gene}
+#'   \item{results_grouped_gene}{Data frame with grouped per-gene Cox results used by KM-style comparisons}
 #'   \item{results_signature}{Cox results for gene signature}
 #'   \item{lasso_selected}{Genes selected by LASSO}
 #'   \item{ph_diagnostics}{Proportional hazards test results}
@@ -75,8 +77,9 @@ analyze_survival_expression <- function(
   event_col = "event",
   time_col = "time",
   clinical_covariates = NULL,
-  split_method = c("quartiles", "tertiles", "median", "percentiles"),
+  split_method = c("quartiles", "tertiles", "median", "percentiles", "detectable"),
   percentile_cutoffs = c(25, 75),
+  detection_threshold = 0,
   include_groups = c("low", "high"),
   steps_to_run = c("individual+covariates", "individual", "signature+covariates", 
                    "signature", "lasso", "km_individual"),
@@ -305,8 +308,37 @@ analyze_survival_expression <- function(
     out
   }
   
+  cluster_display_settings <- function(split_method, local_plot_params) {
+    if (split_method == "detectable") {
+      return(list(
+        color_map = c(A = local_plot_params$color_low, C = local_plot_params$color_high),
+        label_map = c(A = "Undetectable", C = "Detectable")
+      ))
+    }
+
+    if (split_method == "median") {
+      return(list(
+        color_map = c(A = local_plot_params$color_low, B = local_plot_params$color_high),
+        label_map = c(A = local_plot_params$label_low, B = local_plot_params$label_high)
+      ))
+    }
+
+    list(
+      color_map = c(
+        A = local_plot_params$color_low,
+        B = local_plot_params$color_mid,
+        C = local_plot_params$color_high
+      ),
+      label_map = c(
+        A = local_plot_params$label_low,
+        B = local_plot_params$label_mid,
+        C = local_plot_params$label_high
+      )
+    )
+  }
+
   # Make expression groups
-  make_clusters <- function(x_num, split_method, percentile_cutoffs, include_groups) {
+  make_clusters <- function(x_num, split_method, percentile_cutoffs, include_groups, detection_threshold) {
     if (split_method == "median") {
       med <- stats::median(x_num, na.rm = TRUE)
       cl <- ifelse(x_num < med, "A", ifelse(x_num >= med, "B", NA))
@@ -349,6 +381,13 @@ analyze_survival_expression <- function(
       keep <- c()
       if ("low"  %in% include_groups) keep <- c(keep, "A")
       if ("mid"  %in% include_groups) keep <- c(keep, "B")
+      if ("high" %in% include_groups) keep <- c(keep, "C")
+      cl[!(cl %in% keep)] <- NA
+      levels <- keep
+    } else if (split_method == "detectable") {
+      cl <- ifelse(is.na(x_num), NA, ifelse(x_num <= detection_threshold, "A", "C"))
+      keep <- c()
+      if ("low" %in% include_groups) keep <- c(keep, "A")
       if ("high" %in% include_groups) keep <- c(keep, "C")
       cl[!(cl %in% keep)] <- NA
       levels <- keep
@@ -425,16 +464,9 @@ analyze_survival_expression <- function(
     }
     recognized_levels <- c("A", "B", "C")
     if (length(strata_levels) && all(strata_levels %in% recognized_levels)) {
-      color_map <- c(
-        A = local_plot_params$color_low,
-        B = local_plot_params$color_mid,
-        C = local_plot_params$color_high
-      )
-      label_map <- c(
-        A = local_plot_params$label_low,
-        B = local_plot_params$label_mid,
-        C = local_plot_params$label_high
-      )
+      display_settings <- cluster_display_settings(split_method, local_plot_params)
+      color_map <- display_settings$color_map
+      label_map <- display_settings$label_map
       colors <- unname(color_map[strata_levels])
       labels <- unname(label_map[strata_levels])
     } else {
@@ -533,7 +565,10 @@ analyze_survival_expression <- function(
     }
     p <- p2
 
-    # Helper to build comparison lines (High vs Low, Mid vs Low)
+    primary_contrast_label <- if (split_method == "detectable") "Detectable vs Undetectable" else "High vs Low"
+    secondary_contrast_label <- if (split_method %in% c("detectable", "median")) NULL else "Mid vs Low"
+
+    # Helper to build comparison lines for the active grouping mode.
     build_lines <- function(cox_summary, prefix) {
       if (is.null(cox_summary)) return(character(0))
       rn <- rownames(cox_summary$coefficients)
@@ -548,8 +583,9 @@ analyze_survival_expression <- function(
           out <<- c(out, sprintf("%s %s HR = %.2f (%.2f-%.2f), p = %s", prefix, label, hr, lo, hi, format.pval(pval, digits = 3)))
         }
       }
-      if ("clusterC" %in% rn) add_line("clusterC", "High vs Low")
-      if ("clusterB" %in% rn) add_line("clusterB", "Mid vs Low")
+      if (split_method == "median" && "clusterB" %in% rn) add_line("clusterB", primary_contrast_label)
+      if (split_method != "median" && "clusterC" %in% rn) add_line("clusterC", primary_contrast_label)
+      if (!is.null(secondary_contrast_label) && "clusterB" %in% rn) add_line("clusterB", secondary_contrast_label)
       if (!length(out)) { # fallback any cluster term
         idx_any <- grep("^cluster", rn)
         if (length(idx_any)) {
@@ -580,13 +616,18 @@ analyze_survival_expression <- function(
       TRUE
     }, error = function(e) NULL)
 
-    # Build structured table rows (Test, HR, CI, p) - using short labels
+    # Build structured table rows (Test, HR, CI, p).
     build_table_rows <- function(prefix, cox_summary) {
       # If adjusted model was attempted but not available, emit placeholder rows so user sees absence explicitly
       if (is.null(cox_summary)) {
         if (identical(prefix, "adj") && isTRUE(attempted_adj)) {
           # Provide placeholders for both comparisons
-          pl <- data.frame(Test = c("adj H vs L", "adj M vs L"), HR = NA_real_, CI = "", p = NA_real_)
+          pl <- data.frame(
+            Test = if (split_method == "detectable") "adj Detectable vs Undetectable" else if (split_method == "median") "adj H vs L" else c("adj H vs L", "adj M vs L"),
+            HR = NA_real_,
+            CI = "",
+            p = NA_real_
+          )
           if (!is.null(adj_reason)) attr(pl, "adj_reason") <- adj_reason
           return(pl)
         } else {
@@ -607,8 +648,9 @@ analyze_survival_expression <- function(
           rows[[length(rows)+1]] <<- data.frame(Test = test_name, HR = hr, CI = sprintf("%.2f-%.2f", lo, hi), p = pvl)
         }
       }
-      if ("clusterC" %in% rn) add_row("clusterC", "H vs L")
-      if ("clusterB" %in% rn) add_row("clusterB", "M vs L")
+      if (split_method == "median" && "clusterB" %in% rn) add_row("clusterB", "H vs L")
+      if (split_method != "median" && "clusterC" %in% rn) add_row("clusterC", if (split_method == "detectable") "Detectable vs Undetectable" else "H vs L")
+      if (!split_method %in% c("detectable", "median") && "clusterB" %in% rn) add_row("clusterB", "M vs L")
       if (!length(rows)) {
         idx_any <- grep("^cluster", rn)
         if (length(idx_any)) {
@@ -790,6 +832,10 @@ analyze_survival_expression <- function(
     p$cox_adj <- cox_adj
     p$cont_unadj <- cont_unadj
     p$cont_adj <- cont_adj
+    p$covariates_requested <- clinical_covariates
+    p$covariates_retained_grouped <- retained_covariates
+    p$covariates_retained_continuous <- if (exists("keep_covs_here2", inherits = FALSE)) keep_covs_here2 else character(0)
+    p$split_method <- split_method
     p
   }
   
@@ -828,9 +874,10 @@ analyze_survival_expression <- function(
     dplyr::select(dplyr::all_of(c(gene_col, available_samples))) %>%
     dplyr::filter(.data[[gene_col]] %in% genes)
   
-  gene_mat <- as.matrix(selected_data[, -1])
-  rownames(gene_mat) <- selected_data[[gene_col]]
-  gene_mat <- t(scale(t(gene_mat)))  # Z-score by gene
+  raw_gene_mat <- as.matrix(selected_data[, -1])
+  rownames(raw_gene_mat) <- selected_data[[gene_col]]
+  gene_mat <- t(scale(t(raw_gene_mat)))  # Z-score by gene for continuous modeling
+  grouped_gene_mat <- if (split_method == "detectable") raw_gene_mat else gene_mat
   
   sum_expression <- colSums(gene_mat, na.rm = TRUE)  # Signature score
   
@@ -896,12 +943,91 @@ analyze_survival_expression <- function(
   results <- list(
     results_univariate = NULL,
     results_adjusted = NULL,
+    results_grouped_gene = NULL,
     results_signature = NULL,
     lasso_selected = NULL,
     ph_diagnostics = NULL,
     sample_groups = NULL,
     plots = list()
   )
+
+  build_grouped_gene_export_rows <- function(cox_summary, feature_name, model_type,
+                                             split_method, requested_covariates,
+                                             retained_covariates) {
+    if (is.null(cox_summary)) {
+      return(NULL)
+    }
+
+    coefficient_rows <- rownames(cox_summary$coefficients)
+    cluster_rows <- grep("^cluster", coefficient_rows)
+    if (!length(cluster_rows)) {
+      return(NULL)
+    }
+
+    describe_term <- function(term_name, split_method) {
+      if (split_method == "detectable") {
+        return(list(
+          comparison = "Detectable vs Undetectable",
+          reference_group = "Undetectable",
+          comparison_group = "Detectable"
+        ))
+      }
+
+      if (term_name == "clusterC") {
+        return(list(
+          comparison = "High vs Low",
+          reference_group = "Low",
+          comparison_group = "High"
+        ))
+      }
+
+      if (term_name == "clusterB") {
+        if (split_method == "median") {
+          return(list(
+            comparison = "High vs Low",
+            reference_group = "Low",
+            comparison_group = "High"
+          ))
+        }
+
+        return(list(
+          comparison = "Mid vs Low",
+          reference_group = "Low",
+          comparison_group = "Mid"
+        ))
+      }
+
+      list(
+        comparison = term_name,
+        reference_group = NA_character_,
+        comparison_group = NA_character_
+      )
+    }
+
+    rows <- lapply(cluster_rows, function(idx) {
+      term_name <- coefficient_rows[[idx]]
+      labels <- describe_term(term_name, split_method)
+
+      data.frame(
+        feature = feature_name,
+        comparison = labels$comparison,
+        reference_group = labels$reference_group,
+        comparison_group = labels$comparison_group,
+        HR = unname(cox_summary$conf.int[idx, "exp(coef)"]),
+        CI_lower = unname(cox_summary$conf.int[idx, "lower .95"]),
+        CI_upper = unname(cox_summary$conf.int[idx, "upper .95"]),
+        p_value = unname(cox_summary$coefficients[idx, "Pr(>|z|)"]),
+        N = cox_summary$n,
+        events = cox_summary$nevent,
+        model_type = model_type,
+        covariates_requested = if (length(requested_covariates)) paste(requested_covariates, collapse = ",") else "none",
+        covariates_retained = if (length(retained_covariates)) paste(retained_covariates, collapse = ",") else "none",
+        stringsAsFactors = FALSE
+      )
+    })
+
+    dplyr::bind_rows(rows)
+  }
   
   # ============================================================================
   # ANALYSIS MODULES
@@ -912,7 +1038,7 @@ analyze_survival_expression <- function(
     if (verbose) cat("\n=== Individual Gene Analysis (Univariate) ===\n")
     
     res_univ <- lapply(genes, function(g) {
-      expr_g <- get_expr_aligned(g, gene_mat, merged_base, available_samples)
+      expr_g <- get_expr_aligned(g, grouped_gene_mat, merged_base, available_samples)
       df <- merged_base %>% dplyr::mutate(expr = expr_g)
       if (all(is.na(df$expr))) return(NULL)
       
@@ -1052,6 +1178,8 @@ analyze_survival_expression <- function(
       labs <- ifelse(sig_vec <= lo, "A",
                      ifelse(sig_vec >= hi, "C",
                             ifelse(sig_vec > lo & sig_vec < hi, "B", NA)))
+    } else if (split_method == "detectable") {
+      labs <- ifelse(is.na(sig_vec), NA, ifelse(sig_vec <= detection_threshold, "A", "C"))
     }
     
     surv_data <- merged_with_sig %>%
@@ -1061,7 +1189,7 @@ analyze_survival_expression <- function(
     # Keep only requested groups
     keep <- character(0)
     if ("low" %in% include_groups) keep <- c(keep, "A")
-    if ("mid" %in% include_groups && split_method != "median") keep <- c(keep, "B")
+    if ("mid" %in% include_groups && !split_method %in% c("median", "detectable")) keep <- c(keep, "B")
     if ("high" %in% include_groups) keep <- c(keep, if (split_method == "median") "B" else "C")
     
     surv_data <- surv_data %>%
@@ -1272,7 +1400,8 @@ analyze_survival_expression <- function(
             window_data$signature_score,
             split_method = split_method,
             percentile_cutoffs = percentile_cutoffs,
-            include_groups = c("low", "high")
+            include_groups = c("low", "high"),
+            detection_threshold = detection_threshold
           )
           cluster_chr <- as.character(cluster_two)
           cluster_chr[cluster_chr == "A"] <- "Low"
@@ -1650,6 +1779,7 @@ analyze_survival_expression <- function(
     if (verbose) cat("\n=== Individual Gene KM Plots ===\n")
   genes_to_plot <- genes
   genes_for_combination <- genes  # track full set actually plotted if we fallback
+    grouped_gene_rows <- list()
     if (!is.null(results$results_adjusted) && nrow(results$results_adjusted) > 0) {
       sig_genes <- results$results_adjusted$Gene[results$results_adjusted$FDR < fdr_threshold]
       if (length(sig_genes) > 0) {
@@ -1662,17 +1792,19 @@ analyze_survival_expression <- function(
     }
     for (g in genes_to_plot) {
       if (!(g %in% rownames(gene_mat))) { if (verbose) message("Skipping ", g, " (not in expression matrix)"); next }
-      expr_g <- get_expr_aligned(g, gene_mat, merged_base, available_samples)
-      surv_gene <- merged_base %>% dplyr::mutate(cluster = make_clusters(expr_g, split_method, percentile_cutoffs, include_groups)) %>% dplyr::filter(!is.na(cluster))
+      expr_g <- get_expr_aligned(g, grouped_gene_mat, merged_base, available_samples)
+      surv_gene <- merged_base %>% dplyr::mutate(cluster = make_clusters(expr_g, split_method, percentile_cutoffs, include_groups, detection_threshold)) %>% dplyr::filter(!is.na(cluster))
       if (nrow(surv_gene) == 0 || nlevels(surv_gene$cluster) < 2) { if (verbose) message("Skipping ", g, " (insufficient strata)"); next }
       fit_g <- survival::survfit(survival::Surv(time, event) ~ cluster, data = surv_gene)
       cox_unadj <- summary(survival::coxph(survival::Surv(time, event) ~ cluster, data = surv_gene))
       cox_adj <- NULL
+      retained_covariates <- character(0)
       if (!is.null(clinical_covariates) && length(clinical_covariates) > 0) {
         keep_covs_here <- intersect(clinical_covariates, setdiff(colnames(surv_gene), c("time", "event", "cluster")))
         if (length(keep_covs_here)) {
           ok <- vapply(keep_covs_here, function(cv) { v <- surv_gene[[cv]]; if (is.numeric(v)) { var(v, na.rm = TRUE) > 0 } else if (is.factor(v) || is.character(v)) { length(unique(na.omit(v))) > 1 } else FALSE }, logical(1))
           keep_covs_here <- keep_covs_here[ok]
+          retained_covariates <- keep_covs_here
           if (length(keep_covs_here)) {
             fml_adj <- as.formula(paste("survival::Surv(time, event) ~ cluster +", paste(keep_covs_here, collapse = " + ")))
             surv_gene_adj <- surv_gene[, c("time", "event", "cluster", keep_covs_here), drop = FALSE]
@@ -1684,12 +1816,29 @@ analyze_survival_expression <- function(
           }
         }
       }
+      grouped_gene_rows[[length(grouped_gene_rows) + 1]] <- build_grouped_gene_export_rows(
+        cox_summary = cox_unadj,
+        feature_name = g,
+        model_type = "grouped_unadjusted",
+        split_method = split_method,
+        requested_covariates = if (is.null(clinical_covariates)) character(0) else clinical_covariates,
+        retained_covariates = character(0)
+      )
+      grouped_gene_rows[[length(grouped_gene_rows) + 1]] <- build_grouped_gene_export_rows(
+        cox_summary = cox_adj,
+        feature_name = g,
+        model_type = "grouped_adjusted",
+        split_method = split_method,
+        requested_covariates = if (is.null(clinical_covariates)) character(0) else clinical_covariates,
+        retained_covariates = retained_covariates
+      )
       gene_params <- plot_params
       gene_params$stats_panel_mode <- "bottom_table"
       # Continuous univariate and adjusted Cox (per-unit expression) for display
       cont_unadj_fit <- try(survival::coxph(survival::Surv(time, event) ~ expr_g, data = surv_gene), silent = TRUE)
       cont_unadj_sum <- if (!inherits(cont_unadj_fit, "try-error")) summary(cont_unadj_fit) else NULL
       cont_adj_sum <- NULL
+      keep_covs_here2 <- character(0)
       if (!is.null(cox_adj)) { # reuse adjusted covariates if available
         if (!is.null(clinical_covariates) && length(clinical_covariates) > 0) {
           keep_covs_here2 <- intersect(clinical_covariates, setdiff(colnames(surv_gene), c("time","event")))
@@ -1861,6 +2010,10 @@ analyze_survival_expression <- function(
         }
       }
     }
+    grouped_gene_rows <- Filter(Negate(is.null), grouped_gene_rows)
+    if (length(grouped_gene_rows)) {
+      results$results_grouped_gene <- dplyr::bind_rows(grouped_gene_rows)
+    }
 
     # Optional: per-gene early/late window KM analyses (similar to signature time-dependent windows)
     if (gene_early_late && run_time_dependent) {
@@ -1868,7 +2021,7 @@ analyze_survival_expression <- function(
       for (g in genes_to_plot) {
         # Build survival frame with expression for gene g
         if (!(g %in% rownames(gene_mat))) next
-        expr_g <- get_expr_aligned(g, gene_mat, merged_with_sig, available_samples)
+        expr_g <- get_expr_aligned(g, grouped_gene_mat, merged_with_sig, available_samples)
         gene_df <- merged_with_sig %>% dplyr::mutate(expr_val = expr_g)
         # Early window truncation / event logic mirroring signature implementation
         early_gene <- gene_df %>%
@@ -1881,7 +2034,7 @@ analyze_survival_expression <- function(
 
         # Helper to form clusters by expression (reuse make_clusters)
         assign_clusters <- function(df) {
-          cl <- make_clusters(df$expr_val, split_method, percentile_cutoffs, include_groups)
+          cl <- make_clusters(df$expr_val, split_method, percentile_cutoffs, include_groups, detection_threshold)
           df$cluster <- cl
           df <- df[!is.na(df$cluster), , drop = FALSE]
           df
@@ -2114,20 +2267,33 @@ analyze_survival_expression <- function(
     sig_members <- split(surv_data$sample_id, surv_data$cluster)
     for (grp in names(sig_members)) {
       col_name <- paste0("Signature_", 
-                        if (grp == "A") "Low" else if (grp == "B") "Mid" else "High")
+                        if (grp == "A") "Low" else if (split_method == "median" && grp == "B") "High" else if (grp == "B") "Mid" else "High")
       group_list[[col_name]] <- sig_members[[grp]]
     }
   }
   
   # Per-gene groups
   for (g in genes) {
-    expr_g <- get_expr_aligned(g, gene_mat, merged_base, available_samples)
-    cl <- make_clusters(expr_g, split_method, percentile_cutoffs, include_groups)
+    expr_g <- get_expr_aligned(g, grouped_gene_mat, merged_base, available_samples)
+    cl <- make_clusters(expr_g, split_method, percentile_cutoffs, include_groups, detection_threshold)
     if (!all(is.na(cl))) {
       sids_by_group <- split(merged_base$sample_id[!is.na(cl)], cl[!is.na(cl)])
       for (lev in names(sids_by_group)) {
-        col_name <- paste0(g, "_", 
-                          if (lev == "A") "Low" else if (lev == "B") "Mid" else "High")
+        col_name <- paste0(
+          g,
+          "_",
+          if (split_method == "detectable") {
+            if (lev == "A") "Undetectable" else "Detectable"
+          } else if (lev == "A") {
+            "Low"
+          } else if (split_method == "median" && lev == "B") {
+            "High"
+          } else if (lev == "B") {
+            "Mid"
+          } else {
+            "High"
+          }
+        )
         group_list[[col_name]] <- sids_by_group[[lev]]
       }
     }

@@ -44,6 +44,8 @@ This command exercises a real maintained workflow through entrypoint.R while als
 - metabric_expression.tsv
 - metabric_metadata.csv
 - single_cohort_subgroup_summary.csv
+- gbm_lgg_p53beta_adjusted_effects_subgroup_summary.csv
+- gbm_lgg_p53beta_interactions_subgroup_summary.csv
 
 ## Example Commands
 
@@ -84,6 +86,25 @@ Rscript entrypoint.R single-cohort-survival \
   --adjust-covariates none
 ```
 
+Detectable-versus-undetectable smoke test:
+
+```bash
+Rscript entrypoint.R single-cohort-survival \
+  --expr-file test_data/tcga_expression.tsv \
+  --meta-file test_data/tcga_metadata_no_subtype.csv \
+  --features GENE_D \
+  --endpoints OS \
+  --split-method detectable \
+  --detection-threshold 5 \
+  --include-groups low,high \
+  --adjust-covariates none \
+  --output-dir results/validation_detectable_single_cohort
+```
+
+This command is a maintained interface check for the detectability mode. It validates that the run writes `Undetectable` and `Detectable` group outputs through the maintained single-cohort path.
+
+The maintained driver also accepts `--include-groups Undetectable,Detectable` as an alias for `--include-groups low,high` in detectability mode.
+
 Single-cohort reporting heatmap smoke test:
 
 ```bash
@@ -104,6 +125,26 @@ The subgroup-summary fixture uses the shared downstream heatmap contract:
 - CI_high
 - p_value
 - p_value_bh
+
+GBM/LGG p53beta adjusted-effects forest fixture:
+
+```bash
+RENV_CONFIG_AUTOLOADER_ENABLED=FALSE Rscript entrypoint.R subgroup-forest-bundle \
+  --subgroup-summary-table test_data/gbm_lgg_p53beta_adjusted_effects_subgroup_summary.csv \
+  --subgroup-type-filter survival_model \
+  --output-dir results/validation_gbm_lgg_adjusted_forest
+```
+
+GBM/LGG p53beta interaction forest fixture:
+
+```bash
+RENV_CONFIG_AUTOLOADER_ENABLED=FALSE Rscript entrypoint.R subgroup-forest-bundle \
+  --subgroup-summary-table test_data/gbm_lgg_p53beta_interactions_subgroup_summary.csv \
+  --subgroup-type-filter interaction_model \
+  --output-dir results/validation_gbm_lgg_interaction_forest
+```
+
+These GBM/LGG fixtures are real field-report tables from an external p53beta signature project. They are intended for reporting-interface and generalization tests, not for standalone scientific interpretation inside this repository.
 
 ## Subtype Guardrail Validation Matrix
 

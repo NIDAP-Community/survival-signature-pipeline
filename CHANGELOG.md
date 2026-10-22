@@ -1,3 +1,12 @@
+# 2026-04-29
+
+- added a maintained `detectable` split mode to the single-cohort workflow so individual genes can be analyzed as true detectable-versus-undetectable groups using an explicit `detection_threshold`
+- updated maintained single-cohort KM legends, comparison labels, and exported sample-group names so `split_method=detectable` renders as `Undetectable` versus `Detectable` rather than inheriting low/high labels
+- documented the maintained detectability mode in the README and restricted it to individual gene features rather than `Signature`
+- added a maintained `grouped_gene_cox_results.csv` export for single-cohort endpoints so grouped per-gene comparisons can be consumed without scraping plots or RDS objects, including explicit reference/comparison labels and retained covariates
+- updated detectability mode so KM statistics rows use the full `Detectable vs Undetectable` wording and the maintained driver accepts `Undetectable,Detectable` as an `include-groups` alias
+- added a maintained `adjusted_model_full_coefficients.csv` export for single-cohort endpoints so full adjusted Cox coefficient tables, including retained covariate terms, are available without extracting them from RDS plot objects
+
 # 2026-04-13
 
 - generalized the maintained single-cohort driver to support a generic `group_column` and `group_filter` interface while retaining `subtype_filter` as a compatibility path

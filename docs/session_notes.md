@@ -188,3 +188,23 @@ This session moved the repository from an architectural assessment into a runnab
 - Validated the new subgroup forest workflow against the existing `test_data/single_cohort_subgroup_summary.csv` fixture and confirmed it writes figure and table outputs under `results/validation_subgroup_forest_bundle`.
 - Updated README guidance and examples to describe subgroup-oriented usage explicitly rather than treating subtype as the only meaningful cohorting pattern.
 - Confirmed the main remaining gap for full subgroup automation is an aggregator that converts a directory of per-group single-cohort runs into one consolidated subgroup summary table in the shared contract.
+
+## GBM/LGG p53beta-WT Signature Planning Note
+
+- The GBM/LGG p53beta-WT signature survival analysis motivated a more general single-cohort stratified and interaction workflow rather than another use of the two-dataset pooled validation workflow.
+- GBM and LGG should be modeled as biologically distinct glioma disease states in a combined tumor cohort, with planned subgroup-specific analyses, rather than as independent validation datasets analogous to TCGA-BRCA and METABRIC.
+- IDH mutation status should be treated as central glioma biology and included as a major covariate, subgroup axis, or interaction axis depending on the analysis design.
+- The recommended primary design is a combined GBM/LGG model for the precomputed `p53b_WT_up_all_no_TP53` GSVA score, adjusted for age plus glioma disease structure such as IDH status and disease group or subtype.
+- Subgroup models should focus on clinically coherent strata, especially GBM IDH-wildtype and LGG IDH-mutant, with other groups included only when sample and event counts support estimation.
+- Two-dataset pooled drivers remain appropriate for independent cohorts measuring a comparable disease setting; they should not be the default path for biologically distinct disease-state comparisons.
+
+## GBM/LGG p53beta Field Report And Agent Handoff
+
+- Captured the completed external GBM/LGG p53beta survival application as `docs/case_studies/gbm_lgg_p53beta_survival.md`.
+- Added `docs/agent_handoff_gbm_lgg_lessons.md` so a pipeline-optimization agent can pick up the lessons without needing the original project conversation.
+- Copied real subgroup-summary fixture tables into `test_data/`:
+  - `gbm_lgg_p53beta_adjusted_effects_subgroup_summary.csv`
+  - `gbm_lgg_p53beta_interactions_subgroup_summary.csv`
+- Recorded that normal `Rscript` in this repo can hang during `.Rprofile`/`renv` startup on this system, while `Rscript --vanilla` and `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE Rscript ...` run the forest driver successfully.
+- Recorded that `entrypoint.R` argument forwarding can be fragile for long quoted label strings with spaces; direct driver invocation avoided that issue.
+- Confirmed the next pipeline-development need is a maintained single-cohort run-plan layer that can emit adjusted-effect and interaction rows into the shared subgroup-summary contract.

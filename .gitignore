@@ -6,3 +6,6 @@ Rplots.pdf
 .DS_Store
 renv/library/
 renv/staging/
+
+# Local, untracked reference scripts retained for comparison during future work.
+local_reference/

@@ -89,8 +89,10 @@ In the first wave, these drivers still retain some historical two-dataset naming
 
 The maintained driver layer now has two categories:
 
-- pooled two-dataset workflows for TCGA plus METABRIC comparisons
+- pooled two-dataset workflows for independent or comparable cohort comparisons
 - a single-cohort workflow for one dataset at a time, using the reusable core directly
+
+Biologically distinct disease-state comparisons, such as GBM versus LGG, should not be forced into the pooled two-dataset workflow by default. Those analyses need a single-cohort or pan-disease-style design with explicit covariates, subgroup analyses, and interaction tests for major biological axes such as IDH mutation status.
 
 Within drivers/, reporting is still a separate downstream concern:
 
@@ -124,7 +126,8 @@ The current cleanup wave follows these rules:
 - scripts/ is still empty
 - src/drivers/ has not been moved or archived yet
 - the maintained pooled summary workflows still require explicit upstream result tables
-- broader cohort generalization has not started yet
+- the maintained workflow layer still needs a general single-cohort stratified survival mode with configurable covariates, subgroup-specific models, and signature-by-group interaction tests
+- broader cohort generalization should avoid overloading two-dataset interaction workflows for biologically distinct disease groups such as GBM versus LGG
 
 ## Expected Flow
 
