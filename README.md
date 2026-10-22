@@ -1,414 +1,131 @@
-# Reusable Survival Analysis Pipeline
+# Survival Signature Pipeline
 
-This repository is a reusable extraction of an older R-based survival-analysis workflow. The architecture target is a reusable, non-interactive survival-analysis pipeline, but the repository is not fully standardized yet.
+An R command-line workflow for survival analysis of gene expression and expression signatures. It supports one prepared cohort, a declarative plan of adjusted/subgroup/interaction Cox models, and pooled analyses of two harmonized independent cohorts. All maintained workflows write run-scoped tables, figures, and provenance metadata.
 
-The current state is mixed:
+## Features
 
-- the main reusable analysis code lives in src/core/
-- shared provenance utilities live in src/utilities/
-- shared reporting utilities also now live in src/utilities/
-- shared maintained-driver CLI utilities now also live in src/utilities/
-- newer pooled and piecewise drivers live in drivers/
-- older HTML-oriented drivers still live in src/drivers/
-- the root entrypoint now dispatches maintained workflows
-- test_data/ now includes one canonical single-cohort smoke-test dataset plus additional synthetic fixtures
-- renv/ is active and renv.lock is checked in
+- Continuous and grouped survival analysis for individual genes and mean-expression signatures
+- Kaplan-Meier plots and Cox models for a single cohort
+- Declarative analysis plans for adjusted overall effects, filtered subgroup effects, and feature-by-group interaction tests
+- Two-cohort piecewise Cox models for comparable, independently collected cohorts
+- Generic forest plots from a shared subgroup-effect table
+- Run metadata, input checksums, session information, and run-scoped output directories
 
-This README documents the current repository honestly so cleanup and refactoring can proceed from a clear baseline.
+## Quick Start
 
-## Goals
+### Local R setup
 
-- keep the analysis layer reusable across expression plus survival datasets
-- preserve non-interactive Rscript execution
-- preserve run metadata and provenance guardrails
-- keep optional reporting separate from core analysis code
-- minimize hard-coded cohort, path, and column assumptions
+The project lockfile targets R 4.5.1. Install `renv` once, then restore the project library from the repository root:
 
-## Current Layout
-
-```text
-.github/
-container/
-docs/
-drivers/
-entrypoint.R
-renv/
-results/
-scripts/
-src/
-  core/
-  drivers/
-  utilities/
-test_data/
-CHANGELOG.md
-LICENSE
-README.md
+```bash
+Rscript --vanilla -e 'if (!requireNamespace("renv", quietly = TRUE)) install.packages("renv", repos = "https://cloud.r-project.org"); renv::restore(project = getwd(), prompt = FALSE)'
 ```
 
-## Architecture Status
-
-The intended architecture is only partially in place.
-
-- root entrypoint: present and dispatches maintained workflows
-- container/: present but currently empty
-- scripts/: present but currently empty
-- src/core/: present and contains the main reusable survival-analysis function
-- drivers/: present and contains the maintained analysis and reporting workflows
-- src/drivers/: present, but currently contains older cohort-specific and report-oriented wrappers
-- src/utilities/: present and now contains both provenance helpers and reporting-side helpers
-- test_data/: present and contains one canonical smoke-test input pair for the maintained single-cohort workflow plus additional synthetic fixtures
-- results/: present and suitable for run-scoped outputs
-- docs/: present, with architecture documentation started
-- renv.lock: present
-
-## Code Layers
-
-### Core analysis layer
-
-The reusable analysis engine is in src/core/GeneExpressionBasedSurvivalAnalys.r. It provides the main analyze_survival_expression() function used by the older driver layer. This is the strongest candidate for the long-term reusable core.
-
-### Provenance utility layer
-
-src/utilities/run_provenance_guardrails.R provides output-path guardrails, run metadata helpers, and the shared subgroup-summary normalization and validation helpers used by reporting workflows.
-
-### Reporting utility layer
-
-src/utilities/reporting_helpers.R provides shared reporting-side helpers for subgroup heatmap preparation, shared reporting output scaffolding, shared reporting table-formatting helpers, and common plotting defaults. These helpers reduce duplicated downstream reporting code, but they do not merge the reporting workflows or change the subgroup-summary contract.
-
-### Maintained CLI utility layer
-
-src/utilities/cli_helpers.R provides the small shared utility layer used by the maintained drivers before workflow-specific preparation begins. It currently centralizes:
-
-- standardized help rendering and argument parsing
-- required-argument enforcement and workflow-aware CLI error messages
-- compatibility alias handling for maintained flags
-- comma-separated list parsing and repeated enum-like flag validation
-- maintained OS/PFI endpoint mapping
-- minimal required input-file existence checks for maintained analysis drivers
-- maintained analysis-table loading for expression and metadata inputs
-
-It does not centralize dataset-specific filtering, metadata validation, endpoint-column checks inside each workflow, cohort assumptions, or modeling logic.
-
-### Maintained driver layer
-
-The drivers/ directory contains newer command-line scripts for pooled and piecewise modeling:
-
-- run_piecewise_dataset_interaction.R
-- run_piecewise_subtype_specific.R
-- run_single_cohort_survival.R
-- run_single_cohort_reporting_bundle.R
-- run_signature_consistency_summary.R
-- run_finalized_pooled_results_bundle.R
-
-These scripts are non-interactive and executable with Rscript. The pooled drivers currently assume two harmonized datasets and now expose neutral `dataset1_*` and `dataset2_*` flags, while retaining the historical TCGA/METABRIC-shaped names as compatibility aliases. They also accept optional `dataset1_label` and `dataset2_label` flags so emitted pooled outputs can use dataset names that match the supplied inputs. The maintained drivers expect datasets to be post-filtered upstream rather than applying a primary-only sample filter internally. The single-cohort analysis and reporting drivers are intended for one dataset at a time.
-
-They now share a common execution path through entrypoint.R and default to run-scoped output directories under results/.
-
-They also now share a small maintained-driver utility layer in src/utilities/cli_helpers.R for repeated CLI, endpoint, file-check, and loader mechanics. The workflows themselves still own their cohort-specific semantics.
-
-The maintained reporting workflows still remain separate:
-
-- run_single_cohort_reporting_bundle.R handles single-cohort downstream summaries and optional subgroup heatmaps
-- run_single_cohort_analysis_plan.R executes declarative overall, subgroup, and interaction models for one cohort
-- run_finalized_pooled_results_bundle.R handles pooled two-dataset downstream forest plots, subtype heatmaps, and manuscript-style reporting outputs
-
-### Legacy layer
-
-The src/drivers/ directory contains older drivers that combine analysis with HTML and markdown reporting. They still rely on the reusable core, but they are closer to manuscript-oriented workflow code than to the maintained drivers/ layer.
-
-Until the driver layout is unified, treat src/drivers/ as legacy-style workflow wrappers and drivers/ as the more active extraction layer.
-
-## Input Contracts
-
-Most workflows expect two inputs.
-
-The single-cohort maintained driver expects one expression matrix plus one metadata table.
-
-### Expression matrix
-
-Expected shape:
-
-- genes in rows
-- samples in columns
-- first column contains gene identifiers
-
-Typical example:
-
-```text
-Gene    Sample1    Sample2    Sample3
-GENE_A  1.2        0.8        1.5
-GENE_B  2.1        1.9        2.4
-```
-
-### Metadata table
-
-Expected shape:
-
-- one row per sample
-- one sample identifier column
-- event and time columns for each endpoint used in the run
-
-Commonly required fields in the current drivers:
-
-- sample identifier column
-- subtype column
-- OS and OS_time
-- PFI and PFI_time
-
-Commonly used covariates in the current drivers:
-
-- age column
-- stage column
-- subtype column
-- race column
-
-## Current Driver Assumptions
-
-The repository is intended to become reusable, but several current scripts still encode historical assumptions.
-
-### Dataset and cohort assumptions
-
-- newer pooled drivers currently default to two example datasets represented by TCGA-like and METABRIC-like smoke fixtures
-- older src/drivers/ scripts are BRCA-focused and assume BRCA subtype labels
-- maintained drivers expect post-filtered inputs and do not apply a primary-only sample filter internally
-- several legacy scripts still assume a TCGA primary-tumor filter based on sample IDs containing _01
-
-These cohort-aware assumptions now mainly appear in the compatibility alias layer and in legacy wrappers, but the maintained pooled CLI now prefers neutral names such as dataset1_expr_file, dataset2_expr_file, dataset1_stage_column, and dataset2_stage_column. The pooled model outputs can label datasets generically through dataset1_label and dataset2_label, even though the workflows remain semantically two-dataset workflows.
-
-### Column-name assumptions
-
-The reusable core supports configurable column names, but the current drivers frequently default to:
-
-- sample column: sampnames
-- gene column: Gene
-- subtype column: Subtype
-- TCGA stage column: ajcc_pathologic_tumor_stage
-- METABRIC stage column: stage_collapsed
-- age column: Diagnosis_Age
-- race column: race_collapsed
-- endpoints: OS and PFI with paired time columns OS_time and PFI_time
-
-For the maintained single-cohort driver, the subtype column is optional unless subtype filtering or subtype-adjusted modeling is requested.
-For the maintained single-cohort driver, covariate selection is now best handled as an explicit CSV list through `--adjust-covariates`, using the actual metadata column names for the dataset you are running.
-
-The maintained single-cohort driver supports two covariate-spec styles:
-
-- raw metadata columns: any exact column names present in the metadata
-- semantic aliases: `subtype`, `stage`, `age`, `race`
-
-For portability across datasets, prefer raw metadata column names. Aliases are only a convenience when your current dataset happens to use the configured default column flags.
-
-Examples:
-
-- `--adjust-covariates Diagnosis_Age,ajcc_pathologic_tumor_stage,race_collapsed,Subtype`
-- `--adjust-covariates age_at_diagnosis,clinical_stage`
-- `--adjust-covariates age,race_collapsed`
-- `--adjust-covariates none`
-
-Requested covariates that are not present in a particular dataset are skipped automatically with a warning, which makes the maintained single-cohort workflow usable across datasets with partially overlapping metadata.
-
-For maintained single-cohort runs that need a true detectable-versus-undetectable gene comparison, use `--split-method detectable` with `--detection-threshold <value>`. In this mode, samples with expression less than or equal to the threshold are labeled `Undetectable` and samples above the threshold are labeled `Detectable`. This mode is currently intended for individual gene features rather than `Signature`.
-
-### Maintained Single-Cohort Quick Reference
-
-If an external coding agent such as Codex is driving this repository, prefer the maintained `single-cohort-survival` workflow through `entrypoint.R` rather than calling older scripts in `src/drivers/`.
-
-Use this workflow when all of the following are true:
-
-- you have one expression matrix and one metadata table for one cohort
-- you want per-gene and optionally signature-based survival analysis through the maintained path
-- you want outputs written to one run-scoped directory under `results/`
-
-Minimum required inputs for `single-cohort-survival`:
-
-- expression table with genes in rows, samples in columns, and one gene identifier column
-- metadata table with one sample identifier column
-- one event column and one time column for each requested endpoint
-
-Minimum flags that should usually be made explicit:
-
-- `--expr-file`
-- `--meta-file`
-- `--features`
-- `--endpoints`
-- `--adjust-covariates`
-- `--output-dir`
-
-Common optional flags that change cohort scope:
-
-- `--group-column` and `--group-filter` for maintained subgroup filtering
-- `--sample-column` if the metadata sample ID column is not `sampnames`
-- `--gene-column` if the expression gene ID column is not `Gene`
-
-Important maintained constraints:
-
-- inputs are expected to be post-filtered upstream; the maintained driver does not apply a primary-only tumor filter internally
-- `--adjust-covariates` should usually be a comma-separated list of raw metadata column names, or `none`
-- supported maintained endpoints are currently `OS` and `PFI`
-- `--split-method detectable` is for individual genes, not `Signature`
-- detectability grouping uses raw expression values for the thresholded split, while continuous Cox summaries still use the standardized modeling path already used by the repo
-- `--include-groups low,high` remains the canonical interface; in detectability mode the maintained driver also accepts `Undetectable,Detectable` and maps them to the same internal groups
-
-Detectability mode contract:
-
-- `--split-method detectable`
-- `--detection-threshold <numeric>`
-- samples with expression `<= detection_threshold` are labeled `Undetectable`
-- samples with expression `> detection_threshold` are labeled `Detectable`
-- `--include-groups low,high` and `--include-groups Undetectable,Detectable` are equivalent in this mode
-- use `--features TP53B` or another explicit gene symbol, not `Signature`
-
-Expected outputs under `<output-dir>/<endpoint>/` include:
-
-- `results_univariate.csv`
-- `grouped_gene_cox_results.csv`
-- `adjusted_model_full_coefficients.csv`
-- `<endpoint>_results.rds`
-- `<endpoint>_summary.md`
-- KM plot PNGs for the requested genes when plotting is enabled
-
-`grouped_gene_cox_results.csv` is the maintained machine-readable export for grouped per-gene Cox comparisons. For detectability runs it writes explicit `reference_group = Undetectable` and `comparison_group = Detectable`, along with `model_type`, `N`, `events`, `covariates_requested`, and `covariates_retained`.
-
-`adjusted_model_full_coefficients.csv` is the maintained machine-readable export for full adjusted Cox coefficient tables. It includes every coefficient retained in the grouped adjusted and continuous adjusted per-gene models, including covariate effects such as age, grade, histology, or sex when those columns are used in the fitted model.
-
-For a question such as "TP53B detectable vs undetectable within LGG IDH-mutant tumors", the maintained pattern is:
-
-1. prepare or filter the metadata so the cohort definition is explicit, or use `--group-column IDH_status --group-filter Mutant` if the metadata already carries that subgroup column
-2. run `single-cohort-survival` with `--features TP53B`
-3. set `--split-method detectable --detection-threshold 0`
-4. choose `--endpoints OS` or `--endpoints OS,PFI` depending on the available metadata columns
-5. pass raw metadata column names to `--adjust-covariates`, or use `none` for an unadjusted first pass
-
-### Feature assumptions
-
-Several drivers hard-code a placeholder four-feature signature:
-
-- GENE_A
-- GENE_B
-- GENE_C
-- GENE_D
-
-Several scripts also hard-code a 60-month early versus late split for piecewise modeling.
-
-## Workflow Selection
-
-Use the maintained workflows according to the analysis shape you need.
-
-- Use `single-cohort-survival` when you have one dataset and want to run the reusable core analysis engine directly.
-- Use `single-cohort-reporting-bundle` when you already have a completed single-cohort run directory and want an overall forest summary, plus an optional subgroup heatmap if you supply subgroup rows explicitly.
-- Use `single-cohort-analysis-plan` when one prepared cohort needs a reproducible, declarative set of adjusted overall effects, filtered subgroup effects, and formal feature-by-group interaction tests. The plan uses generic metadata columns and values; it does not encode project-specific disease logic.
-- Use `subgroup-forest-bundle` when you already have subgroup summary rows in the shared contract and want a generic forest plot across any cohorting scheme, not only cancer subtype.
-- Use `piecewise-dataset-interaction` when you have two harmonized datasets and want pooled piecewise modeling with dataset interaction terms.
-- Use `piecewise-subtype-specific` when you have two harmonized datasets and want pooled piecewise modeling within subtype strata. This workflow also emits a standardized subgroup summary table for downstream heatmaps.
-- Use `signature-consistency-summary` when upstream pooled and subtype result tables already exist and you want a compact comparison summary.
-- Use `finalized-pooled-results-bundle` when upstream pooled two-dataset result tables already exist and you want pooled forest plots, subtype heatmaps, and manuscript-style summary artifacts. This reporting workflow now consumes the shared subgroup-summary contract.
-
-## Execution
-
-All workflows should run non-interactively via Rscript. On a system where the
-project `.Rprofile`/renv autoloader hangs during command-line startup, use the
-maintained local runner after restoring the project library:
+Use the project runner for subsequent command-line runs. It selects the restored library and avoids a known noninteractive `renv` startup problem on some local systems:
 
 ```bash
 ./scripts/run_rscript_project.sh entrypoint.R --help
 ```
 
-The runner disables only the autoloader and explicitly supplies the restored
-project library; it does not fall back silently to global R packages.
-
-The root entrypoint preserves quoted workflow values. For example, a
-comma-separated display-label list containing spaces can be supplied as one
-argument:
+List every maintained workflow and its short description:
 
 ```bash
-./scripts/run_rscript_project.sh entrypoint.R subgroup-forest-bundle \
-  --subgroup-summary-table test_data/gbm_lgg_p53beta_adjusted_effects_subgroup_summary.csv \
-  --subgroup-type-filter survival_model \
-  --subgroup-order combined_age_idh_disease,combined_age_idh_disease_tp53 \
-  --subgroup-labels "Combined age plus IDH plus disease,Combined age plus IDH plus disease plus TP53"
+./scripts/run_rscript_project.sh entrypoint.R list
 ```
 
-The canonical CLI surface is now the root entrypoint.
+## Input Files
 
-List workflows or show usage:
+### Expression matrix
 
-```bash
-Rscript entrypoint.R --help
+Supply a tab-separated expression matrix with genes in rows and samples in columns. The gene-identifier column defaults to `Gene` and can be changed with `--gene-column`.
+
+```text
+Gene    Sample_1    Sample_2    Sample_3
+GENE_A  1.2         0.8         1.5
+GENE_B  2.1         1.9         2.4
 ```
 
-Run a maintained workflow:
+### Metadata table
 
-```bash
-Rscript entrypoint.R piecewise-dataset-interaction \
-  --output-dir results/example_piecewise_dataset_interaction
+Supply a CSV metadata table with one row per sample. The sample identifier defaults to `sampnames` and can be changed with `--sample-column`. For standard endpoints, provide paired event/time columns:
+
+```text
+sampnames,OS,OS_time,PFI,PFI_time,Age,Group
+Sample_1,1,18,1,12,55,Control
+Sample_2,0,42,0,42,61,Treatment
 ```
 
-```bash
-Rscript entrypoint.R piecewise-subtype-specific \
-  --subtype-list BRCA_Basal \
-  --adjust-covariates none
-```
+`OS`/`OS_time` and `PFI`/`PFI_time` are the default endpoint mappings. Change them with the corresponding CLI flags. The analysis-plan workflow also allows a row to define any explicit `event_column` and `time_column` pair.
+
+Prepare filtering and sample inclusion upstream. Maintained drivers analyze the rows supplied to them; they do not impose a tumor-type or sample-type filter.
+
+## Choose a Workflow
+
+| Workflow | Use when |
+| --- | --- |
+| `single-cohort-survival` | You need grouped and continuous gene/signature survival analysis, Kaplan-Meier plots, and per-endpoint outputs for one cohort. |
+| `single-cohort-analysis-plan` | You need a reproducible collection of adjusted overall effects, filtered subgroup effects, or formal feature-by-group interaction tests for one prepared cohort. |
+| `subgroup-forest-bundle` | You already have a shared subgroup-effect summary table and need a forest plot. |
+| `piecewise-dataset-interaction` | You have two harmonized, independent comparable cohorts and need pooled piecewise models with dataset interactions. |
+| `piecewise-subtype-specific` | You have two harmonized cohorts and need pooled piecewise models within defined subgroup values. |
+| `single-cohort-reporting-bundle` | You need reporting figures and tables from a completed `single-cohort-survival` run. |
+| `finalized-pooled-results-bundle` | You need reporting figures and summary text from completed pooled result tables. |
+
+Do not use the two-cohort workflows to represent biologically different disease states as though they were independent validation cohorts. Use a single-cohort analysis plan with explicit covariates, filters, and interaction axes instead.
+
+## Run a Single-Cohort Analysis
+
+This example runs the bundled smoke-test cohort through the maintained single-cohort workflow:
 
 ```bash
-Rscript entrypoint.R single-cohort-survival \
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-survival \
   --expr-file test_data/tcga_expression.tsv \
-  --meta-file test_data/tcga_metadata.csv \
-  --group-column Response \
-  --group-filter Responder \
+  --meta-file test_data/tcga_metadata_no_subtype.csv \
+  --features GENE_D \
   --endpoints OS \
-  --features Signature \
-  --adjust-covariates Diagnosis_Age,ajcc_pathologic_tumor_stage,race_collapsed,Subtype
+  --adjust-covariates none \
+  --output-dir results/single_cohort_smoke
 ```
 
+For a real run, make the feature, endpoint, covariate, and output choices explicit:
+
 ```bash
-Rscript entrypoint.R single-cohort-survival \
-  --expr-file <expr.tsv> \
-  --meta-file <meta.csv> \
-  --group-column IDH_status \
-  --group-filter Mutant \
-  --features TP53B \
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-survival \
+  --expr-file <expression.tsv> \
+  --meta-file <metadata.csv> \
+  --sample-column <sample_id_column> \
+  --gene-column <gene_id_column> \
+  --features <gene_or_Signature> \
+  --signature-genes <gene1,gene2,gene3> \
+  --endpoints OS,PFI \
+  --adjust-covariates <metadata_column1,metadata_column2> \
+  --output-dir results/<run_name>
+```
+
+Use `--features Signature` only when `--signature-genes` supplies the feature members. To restrict an analysis to a metadata-defined group, add `--group-column <column>` and `--group-filter <value1,value2>`.
+
+### Detectable versus undetectable genes
+
+For an individual gene, use an explicit threshold:
+
+```bash
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-survival \
+  --expr-file <expression.tsv> \
+  --meta-file <metadata.csv> \
+  --features <gene> \
   --endpoints OS \
   --split-method detectable \
   --detection-threshold 0 \
-  --adjust-covariates none
+  --include-groups Undetectable,Detectable \
+  --adjust-covariates none \
+  --output-dir results/<detectability_run>
 ```
 
-```bash
-Rscript entrypoint.R single-cohort-reporting-bundle \
-  --input-run-dir results/smoke_test_single_cohort \
-  --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv
-```
+This grouping is only available for individual genes, not `Signature`.
 
-```bash
-Rscript entrypoint.R subgroup-forest-bundle \
-  --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv \
-  --subgroup-type-filter subtype \
-  --subgroup-order BRCA_Basal,BRCA_LumA \
-  --subgroup-labels Basal,LumA
-```
+## Run a Declarative Analysis Plan
 
-Downstream summary and reporting workflows require explicit upstream result tables:
-
-The shared subgroup-summary contract for downstream heatmaps uses these columns:
-
-- subgroup
-- subgroup_type
-- feature
-- endpoint
-- comparison
-- HR
-- CI_low
-- CI_high
-- p_value
-- p_value_bh
-
-Additional columns such as dataset, window, model, or covariates may be present and are preserved when available.
-
-The maintained code should treat these as generic subgroup rows, not inherently subtype rows. `subgroup_type` can be values such as `subtype`, `response_status`, `gleason_risk`, or any other cohorting definition that is meaningful for the dataset at hand.
-
-### Declarative Single-Cohort Analysis Plans
-
-`single-cohort-analysis-plan` is the maintained producer for a planned collection of overall, subgroup, and interaction Cox models from one prepared cohort. It writes adjusted feature-effect and interaction rows directly into the shared subgroup-summary contract, while keeping the two result types distinct through `subgroup_type`.
+Use `single-cohort-analysis-plan` for a planned collection of continuous Cox models. Each CSV row describes an independent `overall`, `subgroup`, or `interaction` model; cohort-specific column names, filters, covariates, signature members, and interaction references live in the plan rather than in the code.
 
 ```bash
 ./scripts/run_rscript_project.sh entrypoint.R single-cohort-analysis-plan \
@@ -418,212 +135,98 @@ The maintained code should treat these as generic subgroup rows, not inherently 
   --output-dir results/analysis_plan_smoke
 ```
 
-The plan contract is documented in [`docs/analysis_plan_contract.md`](docs/analysis_plan_contract.md). Its required fields are only `analysis_id`, `analysis_type`, `feature`, and `endpoint`; all cohort-specific filters, covariates, interaction axes, signatures, and nonstandard endpoint mappings are optional plan columns. The bundled plan is synthetic interface coverage, not an analysis template for a specific disease.
+The required plan columns are:
+
+| Column | Description |
+| --- | --- |
+| `analysis_id` | Unique identifier for the model row. |
+| `analysis_type` | `overall`, `subgroup`, or `interaction`. |
+| `feature` | Gene identifier, or display label for a signature. |
+| `endpoint` | `OS` or `PFI`, or a custom label when explicit endpoint columns are included. |
+
+See [the analysis-plan contract](docs/analysis_plan_contract.md) for the complete optional-column schema and output definitions.
+
+## Run a Two-Cohort Analysis
+
+Use the pooled workflows only with two independently collected, harmonized cohorts representing a comparable disease setting. Label the cohorts explicitly and supply all four input tables:
 
 ```bash
-Rscript entrypoint.R signature-consistency-summary \
-  --overall-implied-csv <path> \
-  --overall-summary-csv <path> \
-  --subtype-implied-csv <path> \
-  --subtype-summary-csv <path> \
-  --subtype-terms-csv <path>
+./scripts/run_rscript_project.sh entrypoint.R piecewise-dataset-interaction \
+  --dataset1-expr-file <cohort_1_expression.tsv> \
+  --dataset1-meta-file <cohort_1_metadata.csv> \
+  --dataset1-label <cohort_1_name> \
+  --dataset2-expr-file <cohort_2_expression.tsv> \
+  --dataset2-meta-file <cohort_2_metadata.csv> \
+  --dataset2-label <cohort_2_name> \
+  --features Signature \
+  --signature-genes <gene1,gene2,gene3> \
+  --endpoints OS,PFI \
+  --output-dir results/<pooled_run>
 ```
+
+For subtype- or other stratum-specific pooled models, use `piecewise-subtype-specific --help` to review its required dataset-specific column flags and `--subtype-list` interface.
+
+## Make a Forest Plot from Subgroup Results
+
+All subgroup-producing workflows can emit or consume the shared summary columns below:
+
+```text
+subgroup, subgroup_type, feature, endpoint, comparison,
+HR, CI_low, CI_high, p_value, p_value_bh
+```
+
+Create a generic forest plot from such a table:
 
 ```bash
-Rscript entrypoint.R finalized-pooled-results-bundle \
-  --overall-signature-table <path> \
-  --pooled-term-table <path> \
-  --subgroup-summary-table <path>
+./scripts/run_rscript_project.sh entrypoint.R subgroup-forest-bundle \
+  --subgroup-summary-table <subgroup_effect_summary.csv> \
+  --subgroup-type-filter <subgroup_type> \
+  --output-dir results/<forest_run>
 ```
 
-The maintained driver scripts are also still directly runnable if needed:
+## Output Files
+
+Each run writes to the specified `results/<run_name>/` directory and includes `RUN_METADATA.md` plus `logs/sessionInfo.txt`.
+
+Typical analysis outputs include:
+
+```text
+results/<run_name>/
+├── RUN_METADATA.md
+├── logs/
+│   └── sessionInfo.txt
+├── tables/
+│   ├── model_coefficients.csv                 # analysis-plan workflow
+│   ├── subgroup_effect_summary.csv            # analysis-plan/subgroup workflows
+│   └── ...
+├── figures/                                   # reporting and forest workflows
+└── OS/ or PFI/                                # single-cohort endpoint outputs
+    ├── adjusted_model_full_coefficients.csv
+    ├── grouped_gene_cox_results.csv
+    ├── results_univariate.csv
+    └── <endpoint>_results.rds
+```
+
+Output names vary by workflow. Run `--help` before a new workflow and retain the corresponding `RUN_METADATA.md` with any result shared outside the repository.
+
+## Help and Smoke Tests
+
+Every maintained workflow provides workflow-specific help:
 
 ```bash
-Rscript drivers/run_piecewise_dataset_interaction.R \
-  --output-dir results/example_piecewise_dataset_interaction
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-survival --help
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-analysis-plan --help
+./scripts/run_rscript_project.sh entrypoint.R piecewise-dataset-interaction --help
 ```
 
-```bash
-Rscript drivers/run_piecewise_subtype_specific.R \
-  --output-dir results/example_piecewise_subtype_specific
-```
+The small files in `test_data/` are interface smoke-test fixtures only; they are not suitable for scientific interpretation. See [test_data/README.md](test_data/README.md) for the supported smoke-test commands.
 
-```bash
-Rscript drivers/run_signature_consistency_summary.R \
-  --overall-implied-csv <path> \
-  --overall-summary-csv <path> \
-  --subtype-implied-csv <path> \
-  --subtype-summary-csv <path> \
-  --subtype-terms-csv <path> \
-  --output-dir results/example_signature_consistency
-```
+## Requirements
 
-```bash
-Rscript drivers/run_single_cohort_survival.R \
-  --expr-file test_data/tcga_expression.tsv \
-  --meta-file test_data/tcga_metadata.csv \
-  --group-column Response \
-  --group-filter Responder \
-  --endpoints OS \
-  --adjust-covariates Diagnosis_Age,ajcc_pathologic_tumor_stage,race_collapsed,Subtype
-```
+- R 4.5.1 or a compatible R release
+- The project library restored from `renv.lock`
+- Tab-separated expression matrices and CSV metadata tables as described above
 
-```bash
-Rscript drivers/run_single_cohort_reporting_bundle.R \
-  --input-run-dir results/smoke_test_single_cohort \
-  --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv
-```
+## Support
 
-```bash
-Rscript drivers/run_subgroup_forest_bundle.R \
-  --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv \
-  --subgroup-type-filter subtype
-```
-
-```bash
-Rscript drivers/run_finalized_pooled_results_bundle.R \
-  --overall-signature-table <path> \
-  --pooled-term-table <path> \
-  --subgroup-summary-table <path> \
-  --output-dir results/example_pooled_bundle
-```
-
-The src/drivers/ scripts are still runnable, but they should be treated as legacy-style wrappers until the architecture is cleaned up.
-
-## Smoke-Test Data
-
-The repository now includes a canonical single-cohort smoke-test dataset under test_data/, plus additional synthetic fixtures for other interface checks.
-
-The two current validation anchors in this repository are:
-
-- the canonical single-cohort smoke baseline at results/smoke_test_single_cohort_canonical
-- the pooled reporting contract smoke baseline at results/pooled_reporting_contract_smoke_shared_plotting
-
-After the maintained-driver CLI and utility cleanup work, both baselines were rerun successfully through the root entrypoint during these checkpoint paths as well:
-
-- results/smoke_test_single_cohort_canonical_cli_help
-- results/smoke_test_single_cohort_centralized_parsing
-- results/smoke_test_single_cohort_endpoint_helpers
-- results/smoke_test_single_cohort_loader_helpers
-- results/pooled_reporting_contract_smoke_cli_help
-- results/pooled_reporting_contract_smoke_centralized_parsing
-- results/pooled_reporting_contract_smoke_endpoint_helpers
-- results/pooled_reporting_contract_smoke_loader_helpers
-
-These reruns are checkpoint validations of the maintained driver surface, not new canonical baselines.
-
-The canonical validated smoke test in this repository is:
-
-```bash
-Rscript entrypoint.R single-cohort-survival \
-  --expr-file test_data/tcga_expression.tsv \
-  --meta-file test_data/tcga_metadata_no_subtype.csv \
-  --features GENE_D \
-  --endpoints OS \
-  --adjust-covariates none \
-  --output-dir results/smoke_test_single_cohort_canonical
-```
-
-That run has already been validated in this repository and writes:
-
-- run_manifest.csv
-- RUN_METADATA.md
-- logs/sessionInfo.txt
-- endpoint outputs such as OS/OS_results.rds, OS/OS_summary.md, and OS/results_univariate.csv
-
-The current pooled reporting contract smoke test is:
-
-```bash
-Rscript entrypoint.R finalized-pooled-results-bundle \
-  --overall-signature-table results/pooled_reporting_contract_smoke_input/overall_signature_table.csv \
-  --pooled-term-table results/pooled_reporting_contract_smoke_input/pooled_term_table.csv \
-  --subgroup-summary-table results/smoke_test_subgroup_contract/tables/subgroup_effect_summary.csv \
-  --output-dir results/pooled_reporting_contract_smoke_shared_plotting
-```
-
-That validation confirms the pooled reporting workflow consumes the same shared subgroup-summary contract used elsewhere.
-
-The test_data/ files are intended for smoke testing and interface validation, not scientific use. They are useful for checking:
-
-- input-column contracts
-- entrypoint dispatch
-- output directory creation
-- provenance metadata generation
-
-The repository also includes GBM/LGG p53beta field-report fixtures for the generic subgroup forest workflow:
-
-- test_data/gbm_lgg_p53beta_adjusted_effects_subgroup_summary.csv
-- test_data/gbm_lgg_p53beta_interactions_subgroup_summary.csv
-
-These fixtures came from an external glioma signature analysis and are documented in docs/case_studies/gbm_lgg_p53beta_survival.md. They are meant to help future pipeline work test single-cohort subgroup and interaction reporting without forcing biologically distinct disease states into the two-dataset pooled workflow.
-
-See test_data/README.md for example commands.
-
-## Dependencies
-
-The repository currently uses R packages including:
-
-- dplyr
-- readr
-- survival
-- ggplot2
-- survminer
-- stringr
-- glmnet
-
-This repository now uses renv for a project-local R environment.
-
-On a fresh machine, restore the environment without loading this project's
-`.Rprofile` first:
-
-```bash
-Rscript --vanilla -e 'if (!requireNamespace("renv", quietly = TRUE)) install.packages("renv", repos = "https://cloud.r-project.org"); renv::restore(project = getwd(), prompt = FALSE)'
-```
-
-You can verify the project environment is aligned with:
-
-```bash
-Rscript --vanilla -e 'renv::status(project = getwd())'
-```
-
-If package restore falls back to source builds, standard system build tools for your platform may still be required.
-
-## Outputs and Provenance
-
-The intended output convention is a run-scoped directory under results/.
-
-Where the provenance utility is used, runs can write:
-
-- RUN_METADATA.md
-- logs/sessionInfo.txt
-- tables/
-- figures/
-
-Current output behavior is still inconsistent:
-
-- drivers/ generally write under results/
-- older src/drivers/ scripts still default to outputs/ legacy paths unless explicitly overridden
-
-Normalizing all maintained workflows to results/<topic>/<run_id>/ is part of the near-term cleanup plan.
-
-## Smallest Safe Cleanup Plan
-
-Before large refactors, the smallest safe cleanup is:
-
-1. document src/drivers/ as legacy or reporting-oriented until they are moved or replaced
-2. add renv.lock and formalize environment restoration
-3. decide whether maintained workflow scripts should remain in drivers/ or move under src/drivers/
-4. tighten shared CLI/help behavior across maintained drivers
-5. begin second-wave reduction of TCGA and METABRIC assumptions
-
-## Immediate Gaps
-
-The following gaps are known and intentional to fix next:
-
-- scripts/ is empty
-- container/ is empty
-- renv.lock is missing
-
-## Working Principle
-
-Prefer the implementation that is more reusable, more explicit, and more reproducible, even when it requires removing historical assumptions from the original workflow.
+Open an issue at [NIDAP-Community/survival-signature-pipeline](https://github.com/NIDAP-Community/survival-signature-pipeline/issues) for bugs, questions, or feature requests. Consult [docs/analysis_plan_contract.md](docs/analysis_plan_contract.md) for the detailed analysis-plan contract and [docs/architecture.md](docs/architecture.md) for development-oriented architecture notes.
