@@ -208,3 +208,10 @@ This session moved the repository from an architectural assessment into a runnab
 - Recorded that normal `Rscript` in this repo can hang during `.Rprofile`/`renv` startup on this system, while `Rscript --vanilla` and `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE Rscript ...` run the forest driver successfully.
 - Recorded that `entrypoint.R` argument forwarding can be fragile for long quoted label strings with spaces; direct driver invocation avoided that issue.
 - Confirmed the next pipeline-development need is a maintained single-cohort run-plan layer that can emit adjusted-effect and interaction rows into the shared subgroup-summary contract.
+
+## Runtime Reliability Follow-Up
+
+- Confirmed that normal noninteractive `Rscript` startup can still hang in `.Rprofile` while activating renv on this machine.
+- Added `scripts/run_rscript_project.sh` as the maintained local execution path: after `renv::restore()`, it disables the autoloader and explicitly selects the restored project library.
+- Restored the locked plotting stack locally and reran the full canonical KM smoke test successfully through the new runner path; the only warnings were expected tiny-fixture Cox convergence and an upstream ggpubr aesthetic deprecation warning.
+- Updated `entrypoint.R` to shell-quote each independently parsed child argument before `system2()` forwarding, preserving quoted labels containing spaces.

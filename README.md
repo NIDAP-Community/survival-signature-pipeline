@@ -303,7 +303,28 @@ Use the maintained workflows according to the analysis shape you need.
 
 ## Execution
 
-All workflows should run non-interactively via Rscript.
+All workflows should run non-interactively via Rscript. On a system where the
+project `.Rprofile`/renv autoloader hangs during command-line startup, use the
+maintained local runner after restoring the project library:
+
+```bash
+./scripts/run_rscript_project.sh entrypoint.R --help
+```
+
+The runner disables only the autoloader and explicitly supplies the restored
+project library; it does not fall back silently to global R packages.
+
+The root entrypoint preserves quoted workflow values. For example, a
+comma-separated display-label list containing spaces can be supplied as one
+argument:
+
+```bash
+./scripts/run_rscript_project.sh entrypoint.R subgroup-forest-bundle \
+  --subgroup-summary-table test_data/gbm_lgg_p53beta_adjusted_effects_subgroup_summary.csv \
+  --subgroup-type-filter survival_model \
+  --subgroup-order combined_age_idh_disease,combined_age_idh_disease_tp53 \
+  --subgroup-labels "Combined age plus IDH plus disease,Combined age plus IDH plus disease plus TP53"
+```
 
 The canonical CLI surface is now the root entrypoint.
 
@@ -536,17 +557,17 @@ The repository currently uses R packages including:
 
 This repository now uses renv for a project-local R environment.
 
-On a fresh machine, restore the environment with:
+On a fresh machine, restore the environment without loading this project's
+`.Rprofile` first:
 
 ```bash
-Rscript -e 'if (!requireNamespace("renv", quietly = TRUE)) install.packages("renv", repos = "https://cloud.r-project.org")'
-Rscript -e 'renv::restore(prompt = FALSE)'
+Rscript --vanilla -e 'if (!requireNamespace("renv", quietly = TRUE)) install.packages("renv", repos = "https://cloud.r-project.org"); renv::restore(project = getwd(), prompt = FALSE)'
 ```
 
 You can verify the project environment is aligned with:
 
 ```bash
-Rscript -e 'renv::status()'
+Rscript --vanilla -e 'renv::status(project = getwd())'
 ```
 
 If package restore falls back to source builds, standard system build tools for your platform may still be required.

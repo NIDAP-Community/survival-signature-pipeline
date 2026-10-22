@@ -26,16 +26,12 @@ Use the GBM/LGG p53beta field report and fixture tables to generalize the surviv
 ## Concrete Pipeline Issues Observed
 
 - Normal `Rscript` from the pipeline repo can hang during `.Rprofile` startup because `.Rprofile` calls `renv/activate.R`.
-- `Rscript --vanilla` avoids the hang.
-- `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE Rscript ...` also avoids the hang.
-- `entrypoint.R` argument forwarding via `system2()` can mishandle long quoted strings containing spaces.
-- Direct driver invocation worked for `drivers/run_subgroup_forest_bundle.R`.
+- Use `scripts/run_rscript_project.sh` after `renv::restore()` for a noninteractive-safe execution path: it disables the autoloader while explicitly selecting the restored project library.
+- `entrypoint.R` now shell-quotes independently parsed workflow arguments before forwarding them through `system2()`, so quoted values containing spaces are preserved.
 
 ## Candidate Work Items
 
-- Add a noninteractive-safe execution path or documented flag for disabling `renv` autoload during reporting workflows.
-- Diagnose the `renv` autoload hang and document the expected pipeline startup behavior.
-- Harden `entrypoint.R` argument forwarding for quoted values.
+- Continue to investigate the underlying `renv/activate.R` hang; the repository now has a documented noninteractive-safe runner as a workaround.
 - Add a maintained aggregator that converts multiple single-cohort pipeline run outputs into the shared subgroup-summary contract.
 - Add maintained support for signature-by-group interaction models in a single-cohort run plan.
 - Extend `subgroup-forest-bundle` examples and tests to cover the GBM/LGG adjusted-effect and interaction fixture tables.

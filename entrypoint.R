@@ -84,5 +84,9 @@ if (!file.exists(script_path)) {
 }
 
 rscript_bin <- file.path(R.home("bin"), "Rscript")
-status <- system2(rscript_bin, args = c(script_path, forwarded_args))
+# system2() ultimately constructs a command line on Unix-like platforms. Quote
+# each independently parsed argument so values such as comma-separated display
+# labels with spaces arrive at the selected driver as one commandArgs() token.
+child_args <- shQuote(c(script_path, forwarded_args))
+status <- system2(rscript_bin, args = child_args)
 quit(save = "no", status = as.integer(status))

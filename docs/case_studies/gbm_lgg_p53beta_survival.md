@@ -34,15 +34,12 @@ This field report captures lessons from applying the reusable survival-signature
 
 - The maintained `subgroup-forest-bundle` plotting helper is useful for this use case.
 - Normal `Rscript` execution from the pipeline repo hung during `.Rprofile` startup because `.Rprofile` activates `renv`.
-- `Rscript --vanilla` worked immediately.
-- `RENV_CONFIG_AUTOLOADER_ENABLED=FALSE Rscript ...` also worked and preserved the entrypoint path.
-- `entrypoint.R` currently forwards workflow arguments with `system2()`. Long comma-separated label arguments containing spaces exposed argument-forwarding fragility. Directly invoking the driver avoided that issue.
+- `scripts/run_rscript_project.sh` is the maintained workaround after `renv::restore()`: it disables the autoloader while selecting the restored project library.
+- `entrypoint.R` now shell-quotes independently parsed workflow arguments before forwarding them through `system2()`, preserving quoted labels containing spaces.
 
 ## Recommended Pipeline Follow-Up
 
-- Add a noninteractive execution mode or documented recommendation for bypassing `renv` autoload when needed.
-- Investigate why `renv/activate.R` can hang in noninteractive `Rscript` runs on this system.
-- Harden `entrypoint.R` argument forwarding so quoted strings with spaces survive intact.
+- Continue investigating why `renv/activate.R` can hang in noninteractive `Rscript` runs on this system; a noninteractive-safe runner is now available.
 - Add a maintained single-cohort stratified/interaction workflow that consumes an analysis configuration rather than requiring a bespoke wrapper script.
 - Add a maintained result aggregator for adjusted Cox rows and interaction rows.
 - Add regression tests using the GBM/LGG p53beta fixture tables added with this field report.

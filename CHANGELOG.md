@@ -1,5 +1,8 @@
 # 2026-04-29
 
+- added `scripts/run_rscript_project.sh`, a noninteractive-safe local runner that bypasses a hanging renv autoloader while requiring the restored project library rather than silently using global packages
+- documented `Rscript --vanilla` restoration and the project runner for reliable command-line execution
+- shell-quoted root-entrypoint child arguments so quoted workflow values containing spaces survive `system2()` forwarding
 - added a maintained `detectable` split mode to the single-cohort workflow so individual genes can be analyzed as true detectable-versus-undetectable groups using an explicit `detection_threshold`
 - updated maintained single-cohort KM legends, comparison labels, and exported sample-group names so `split_method=detectable` renders as `Undetectable` versus `Detectable` rather than inheriting low/high labels
 - documented the maintained detectability mode in the README and restricted it to individual gene features rather than `Signature`
