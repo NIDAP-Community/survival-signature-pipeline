@@ -13,6 +13,7 @@ source("src/utilities/reporting_helpers.R")
 cli_defaults <- list(
   input_run_dir = "",
   output_dir = default_run_output_dir("single_cohort_reporting_bundle"),
+  signature_label = "Signature",
   subgroup_summary_table = "",
   subgroup_column = "subgroup",
   subgroup_type_column = "subgroup_type",
@@ -35,6 +36,7 @@ print_usage <- function() {
     summary_lines = c(
       "This workflow is downstream-only and expects a prior single-cohort run directory with run_manifest.csv and endpoint RDS outputs.",
       "It always builds an overall forest-style summary from available endpoint result objects.",
+      "signature_label controls the displayed signature name in the overall forest plot and summary table.",
       "It only builds a heatmap when subgroup_summary_table is provided with explicit subgroup rows.",
       "The shared subgroup-summary contract uses subgroup, subgroup_type, feature, endpoint, comparison, HR, CI_low, CI_high, p_value, and p_value_bh."
     ),
@@ -43,14 +45,14 @@ print_usage <- function() {
   )
 }
 
-extract_signature_summary <- function(signature_summary, endpoint_name, model_label) {
+extract_signature_summary <- function(signature_summary, endpoint_name, model_label, feature_label = "Signature") {
   if (is.null(signature_summary) || !inherits(signature_summary, "summary.coxph")) return(NULL)
   row_name <- if ("clusterC" %in% rownames(signature_summary$coefficients)) "clusterC" else rownames(signature_summary$coefficients)[1]
   if (is.na(row_name) || !nzchar(row_name)) return(NULL)
 
   data.frame(
     endpoint = endpoint_name,
-    feature = "Signature",
+    feature = feature_label,
     model = model_label,
     HR = signature_summary$conf.int[row_name, "exp(coef)"],
     CI_low = signature_summary$conf.int[row_name, "lower .95"],
@@ -194,8 +196,18 @@ for (row_index in seq_len(nrow(manifest_df))) {
 
   forest_rows[[length(forest_rows) + 1]] <- extract_gene_table(result_obj$results_univariate, endpoint_name, "gene_unadjusted")
   forest_rows[[length(forest_rows) + 1]] <- extract_gene_table(result_obj$results_adjusted, endpoint_name, "gene_adjusted")
-  forest_rows[[length(forest_rows) + 1]] <- extract_signature_summary(result_obj$results_signature$unadjusted, endpoint_name, "signature_unadjusted")
-  forest_rows[[length(forest_rows) + 1]] <- extract_signature_summary(result_obj$results_signature$adjusted, endpoint_name, "signature_adjusted")
+  forest_rows[[length(forest_rows) + 1]] <- extract_signature_summary(
+    result_obj$results_signature$unadjusted,
+    endpoint_name,
+    "Unadjusted",
+    feature_label = opt$signature_label
+  )
+  forest_rows[[length(forest_rows) + 1]] <- extract_signature_summary(
+    result_obj$results_signature$adjusted,
+    endpoint_name,
+    "Adjusted",
+    feature_label = opt$signature_label
+  )
 }
 
 forest_df <- bind_rows(Filter(Negate(is.null), forest_rows))

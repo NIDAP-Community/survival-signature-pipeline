@@ -46,6 +46,17 @@ Use `TARGET_PLATFORM=linux/arm64` or `TARGET_PLATFORM=linux/amd64` when building
 
 The repository's container-validation workflow runs a native image smoke test and builds the ARM64 target on pull requests and pushes to `main`; it does not publish an image. A calling application should follow the [AWS adapter contract](docs/aws_adapter_contract.md) for validated request handling, data staging, and artifact collection.
 
+## Example Output
+
+![Overall forest plot for the PAM50 proliferation-module demonstration](assets/pam50_proliferation_metabric_overall_forest.png)
+
+This overall forest plot comes from an unweighted, 11-gene PAM50
+proliferation-module demonstration in METABRIC. It shows unadjusted and
+covariate-adjusted high-versus-low signature effects for both OS and PFI. It
+demonstrates the reporting layout only; it is not an official PAM50 classifier
+or a clinical prediction model. Review proportional-hazards and
+time-dependent diagnostic outputs before interpreting any forest plot.
+
 ## Input Files
 
 ### Expression matrix
@@ -130,7 +141,17 @@ Signature genes are z-scored within the eligible cohort. The default score is th
 
 Use `--signature-label <display_label>` to give a signature plot a clear human-readable title without changing the score calculation.
 
-`--run-ph-checks false --run-time-dependent false --save-results-rds false` is appropriate for a fast exploratory figure run. Keep the defaults for a complete diagnostic analysis.
+### Complete analysis is the default
+
+A normal run retains result objects, checks proportional-hazards assumptions,
+and performs signature time-dependent analysis when indicated. Together with
+the default `OS,PFI` endpoint set, these artifacts let users inspect the full
+analysis rather than seeing only a Kaplan-Meier figure. Use the reporting
+bundle after a completed run to add the overall forest plot.
+
+For a rapid exploratory figure only, users may explicitly opt out with
+`--run-ph-checks false --run-time-dependent false --save-results-rds false`.
+That mode is not a substitute for the complete diagnostic run.
 
 ### Detectable versus undetectable genes
 
@@ -246,6 +267,7 @@ The single-cohort driver writes its endpoint analyses first. With its default `-
 ```bash
 ./scripts/run_rscript_project.sh entrypoint.R single-cohort-reporting-bundle \
   --input-run-dir results/<single_cohort_run> \
+  --signature-label <display_label> \
   --output-dir results/<single_cohort_reporting_bundle>
 ```
 
