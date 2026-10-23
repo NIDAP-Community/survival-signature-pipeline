@@ -80,6 +80,8 @@ analyze_survival_expression <- function(
   split_method = c("quartiles", "tertiles", "median", "percentiles", "detectable"),
   percentile_cutoffs = c(25, 75),
   detection_threshold = 0,
+  signature_aggregation = c("sum", "mean"),
+  signature_continuous_cohort = c("grouped", "all"),
   include_groups = c("low", "high"),
   steps_to_run = c("individual+covariates", "individual", "signature+covariates", 
                    "signature", "lasso", "km_individual"),
@@ -109,6 +111,8 @@ analyze_survival_expression <- function(
   # ============================================================================
   
   split_method <- match.arg(split_method)
+  signature_aggregation <- match.arg(signature_aggregation)
+  signature_continuous_cohort <- match.arg(signature_continuous_cohort)
   
   if (!is.data.frame(expression_data) && !is.matrix(expression_data)) {
     stop("expression_data must be a data frame or matrix")
@@ -345,30 +349,36 @@ analyze_survival_expression <- function(
       levels <- c("A", "B")
     } else if (split_method == "quartiles") {
       # Use cut() to avoid dropping samples at boundaries
+      keep <- c()
+      if ("low"  %in% include_groups) keep <- c(keep, "A")
+      if ("mid"  %in% include_groups) keep <- c(keep, "B")
+      if ("high" %in% include_groups) keep <- c(keep, "C")
       q25 <- stats::quantile(x_num, 0.25, na.rm = TRUE)
       q75 <- stats::quantile(x_num, 0.75, na.rm = TRUE)
+      if (!is.finite(q25) || !is.finite(q75) || q25 >= q75) {
+        return(factor(rep(NA_character_, length(x_num)), levels = keep))
+      }
       breaks <- c(-Inf, q25, q75, Inf)
       cl <- cut(x_num, breaks = breaks, labels = c("A", "B", "C"), 
                 include.lowest = TRUE, right = TRUE)
       cl <- as.character(cl)
-      keep <- c()
-      if ("low"  %in% include_groups) keep <- c(keep, "A")
-      if ("mid"  %in% include_groups) keep <- c(keep, "B")
-      if ("high" %in% include_groups) keep <- c(keep, "C")
       cl[!(cl %in% keep)] <- NA
       levels <- keep
     } else if (split_method == "tertiles") {
       # Use cut() to avoid dropping samples at boundaries
-      t1 <- stats::quantile(x_num, 1/3, na.rm = TRUE)
-      t2 <- stats::quantile(x_num, 2/3, na.rm = TRUE)
-      breaks <- c(-Inf, t1, t2, Inf)
-      cl <- cut(x_num, breaks = breaks, labels = c("A", "B", "C"), 
-                include.lowest = TRUE, right = TRUE)
-      cl <- as.character(cl)
       keep <- c()
       if ("low"  %in% include_groups) keep <- c(keep, "A")
       if ("mid"  %in% include_groups) keep <- c(keep, "B")
       if ("high" %in% include_groups) keep <- c(keep, "C")
+      t1 <- stats::quantile(x_num, 1/3, na.rm = TRUE)
+      t2 <- stats::quantile(x_num, 2/3, na.rm = TRUE)
+      if (!is.finite(t1) || !is.finite(t2) || t1 >= t2) {
+        return(factor(rep(NA_character_, length(x_num)), levels = keep))
+      }
+      breaks <- c(-Inf, t1, t2, Inf)
+      cl <- cut(x_num, breaks = breaks, labels = c("A", "B", "C"), 
+                include.lowest = TRUE, right = TRUE)
+      cl <- as.character(cl)
       cl[!(cl %in% keep)] <- NA
       levels <- keep
     } else if (split_method == "percentiles") {
@@ -451,7 +461,8 @@ analyze_survival_expression <- function(
   draw_km_plot <- function(fit, surv_df, cox_unadj = NULL, cox_adj = NULL,
                            cont_unadj = NULL, cont_adj = NULL,
                            main_title = "", local_plot_params = NULL,
-                           attempted_adj = FALSE, adj_reason = NULL) {
+                           attempted_adj = FALSE, adj_reason = NULL,
+                           retained_covariates = character(0)) {
     if (is.null(local_plot_params)) local_plot_params <- plot_params
     stats_mode <- local_plot_params$stats_panel_mode %||% "caption"
     if (getOption("km_debug", FALSE)) message("[draw_km_plot] stats_mode initial=", stats_mode)
@@ -879,7 +890,13 @@ analyze_survival_expression <- function(
   gene_mat <- t(scale(t(raw_gene_mat)))  # Z-score by gene for continuous modeling
   grouped_gene_mat <- if (split_method == "detectable") raw_gene_mat else gene_mat
   
-  sum_expression <- colSums(gene_mat, na.rm = TRUE)  # Signature score
+  # Both forms use gene-wise z-scores. Sum preserves the established default;
+  # mean is useful when reproducing analyses that report a per-gene average.
+  signature_expression <- if (signature_aggregation == "mean") {
+    colMeans(gene_mat, na.rm = TRUE)
+  } else {
+    colSums(gene_mat, na.rm = TRUE)
+  }
   
   # Prepare survival data frame
   surv_df <- metadata %>%
@@ -928,7 +945,7 @@ analyze_survival_expression <- function(
                  dplyr::any_of(clinical_covariates))
   
   merged_with_sig <- merged_base %>%
-    dplyr::mutate(signature_score = sum_expression[sample_id]) %>%
+    dplyr::mutate(signature_score = signature_expression[sample_id]) %>%
     dplyr::filter(!is.na(signature_score))  # Remove samples with NA signature scores
   
   if (verbose && nrow(merged_base) != nrow(merged_with_sig)) {
@@ -1289,19 +1306,20 @@ analyze_survival_expression <- function(
         }
       }
       
-      # Continuous signature Cox models to include in stats table
-      sig_cont_unadj_fit <- try(survival::coxph(survival::Surv(time, event) ~ signature_score, data = surv_data), silent = TRUE)
+      # Continuous signature Cox models can use either the plotted groups or
+      # every eligible sample. The latter is needed for analyses that retain
+      # the middle quantile for continuous effect estimation.
+      continuous_surv_data <- if (signature_continuous_cohort == "all") merged_with_sig else surv_data
+      sig_cont_unadj_fit <- try(survival::coxph(survival::Surv(time, event) ~ signature_score, data = continuous_surv_data), silent = TRUE)
       sig_cont_unadj_sum <- if (!inherits(sig_cont_unadj_fit, "try-error")) summary(sig_cont_unadj_fit) else NULL
       sig_cont_adj_sum <- NULL
-      if (!is.null(cox_adj)) {
-        if ("signature+covariates" %in% steps_to_run && !is.null(clinical_covariates) && length(clinical_covariates) > 0) {
-          valid_covs_local2 <- intersect(clinical_covariates, setdiff(colnames(surv_data), c("time","event","cluster","signature_score")))
+      if ("signature+covariates" %in% steps_to_run && !is.null(clinical_covariates) && length(clinical_covariates) > 0) {
+          valid_covs_local2 <- intersect(clinical_covariates, setdiff(colnames(continuous_surv_data), c("time","event","cluster","signature_score")))
           if (length(valid_covs_local2)) {
             f_sig_cont_adj <- as.formula(paste("survival::Surv(time, event) ~ signature_score +", paste(valid_covs_local2, collapse = " + ")))
-            sig_cont_adj_fit <- try(survival::coxph(f_sig_cont_adj, data = surv_data), silent = TRUE)
+            sig_cont_adj_fit <- try(survival::coxph(f_sig_cont_adj, data = continuous_surv_data), silent = TRUE)
             if (!inherits(sig_cont_adj_fit, "try-error")) sig_cont_adj_sum <- summary(sig_cont_adj_fit)
           }
-        }
       }
       # Create plot
       # For signature plots, override to side panel if available
@@ -1326,7 +1344,8 @@ analyze_survival_expression <- function(
           } else {
             "coxph error or convergence failure"
           }
-        } else NULL
+        } else NULL,
+        retained_covariates = valid_covs_local
       )
       plot_params <<- old_plot_params
       

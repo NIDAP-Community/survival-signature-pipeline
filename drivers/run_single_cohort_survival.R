@@ -31,6 +31,8 @@ cli_defaults <- list(
   adjust_covariates = "none",
   split_method = "tertiles",
   detection_threshold = "0",
+  signature_aggregation = "sum",
+  signature_continuous_cohort = "grouped",
   include_groups = "low,mid,high",
   features = "Signature,GENE_A,GENE_B,GENE_C,GENE_D",
   endpoints = "OS,PFI",
@@ -54,6 +56,8 @@ print_usage <- function() {
       "Inputs are expected to be post-filtered upstream; the maintained driver does not apply an internal primary-only sample filter.",
       "adjust_covariates should generally be supplied as explicit metadata column names for the current dataset.",
       "split_method=detectable performs a binary gene grouping using expression <= detection_threshold versus > detection_threshold.",
+      "signature_aggregation controls whether z-scored signature genes are summed or averaged.",
+      "signature_continuous_cohort controls whether continuous signature Cox models use plotted groups or all eligible samples.",
       "Optional aliases are supported as a convenience only: subtype, stage, age, race.",
       "Requested covariates missing from a dataset are skipped automatically; active group filtering requires the chosen group column."
     ),
@@ -307,6 +311,18 @@ opt$split_method <- cli_parse_enum_flag(
   flag_name = "split_method",
   normalize = "lower"
 )
+opt$signature_aggregation <- cli_parse_enum_flag(
+  opt$signature_aggregation,
+  allowed_values = c("sum", "mean"),
+  flag_name = "signature_aggregation",
+  normalize = "lower"
+)
+opt$signature_continuous_cohort <- cli_parse_enum_flag(
+  opt$signature_continuous_cohort,
+  allowed_values = c("grouped", "all"),
+  flag_name = "signature_continuous_cohort",
+  normalize = "lower"
+)
 feature_list <- cli_parse_csv_list(opt$features)
 endpoint_list <- cli_parse_csv_list(opt$endpoints, uppercase = TRUE)
 signature_genes <- cli_parse_csv_list(opt$signature_genes)
@@ -447,6 +463,8 @@ for (endpoint_name in endpoint_list) {
     clinical_covariates = covariates,
     split_method = opt$split_method,
     detection_threshold = opt$detection_threshold,
+    signature_aggregation = opt$signature_aggregation,
+    signature_continuous_cohort = opt$signature_continuous_cohort,
     include_groups = include_groups,
     steps_to_run = steps_to_run,
     run_lasso = is_truthy(opt$run_lasso),
@@ -506,6 +524,8 @@ write_run_metadata_guardrail(
     covariates_resolved = paste(covariates, collapse = ","),
     split_method = opt$split_method,
     detection_threshold = opt$detection_threshold,
+    signature_aggregation = opt$signature_aggregation,
+    signature_continuous_cohort = opt$signature_continuous_cohort,
     include_groups = paste(include_groups, collapse = ","),
     steps_to_run = paste(steps_to_run, collapse = ","),
     cut_months = opt$cut_months,

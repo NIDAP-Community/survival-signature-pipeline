@@ -1,5 +1,8 @@
 # 2026-04-29
 
+- added explicit signature score aggregation (`sum` or `mean`) and continuous-model cohort selection (`grouped` or `all`) to the maintained single-cohort CLI
+- fixed signature plotting when adjusted covariates are supplied and made degenerate quartile/tertile gene groupings non-fatal
+- revalidated local pooled BRCA/METABRIC reproduction against its historical result table and single-cohort signature modeling against independent prostate Cox fits
 - added a portable OCI container build, `/data` to `/output` runtime contract, Docker helpers, and a canonical container smoke test for integration readiness
 - added non-publishing CI validation for a native container smoke test and a separate ARM64 image build
 - added `single-cohort-analysis-plan`, a generic CSV-driven maintained workflow for overall, filtered-subgroup, and feature-by-group interaction Cox models

@@ -4,7 +4,7 @@ An R command-line workflow for survival analysis of gene expression and expressi
 
 ## Features
 
-- Continuous and grouped survival analysis for individual genes and mean-expression signatures
+- Continuous and grouped survival analysis for individual genes and z-scored expression signatures
 - Kaplan-Meier plots and Cox models for a single cohort
 - Declarative analysis plans for adjusted overall effects, filtered subgroup effects, and feature-by-group interaction tests
 - Two-cohort piecewise Cox models for comparable, independently collected cohorts
@@ -116,6 +116,8 @@ For a real run, make the feature, endpoint, covariate, and output choices explic
 ```
 
 Use `--features Signature` only when `--signature-genes` supplies the feature members. To restrict an analysis to a metadata-defined group, add `--group-column <column>` and `--group-filter <value1,value2>`.
+
+Signature genes are z-scored within the eligible cohort. The default score is their sum and continuous signature models use the same groups shown in the Kaplan-Meier plot. Use `--signature-aggregation mean` and/or `--signature-continuous-cohort all` when the analysis specification instead calls for an average score or continuous Cox estimation across all eligible samples.
 
 ### Detectable versus undetectable genes
 
