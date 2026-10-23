@@ -25,7 +25,7 @@ Input pair:
 Canonical command:
 
 ```bash
-Rscript entrypoint.R single-cohort-survival \
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-survival \
   --expr-file test_data/tcga_expression.tsv \
   --meta-file test_data/tcga_metadata_no_subtype.csv \
   --features GENE_D \
@@ -53,7 +53,7 @@ This command exercises a real maintained workflow through entrypoint.R while als
 Two-dataset interface smoke test:
 
 ```bash
-Rscript entrypoint.R piecewise-dataset-interaction \
+./scripts/run_rscript_project.sh entrypoint.R piecewise-dataset-interaction \
   --dataset1-expr-file test_data/tcga_expression.tsv \
   --dataset1-meta-file test_data/tcga_metadata.csv \
   --dataset2-expr-file test_data/metabric_expression.tsv \
@@ -65,7 +65,7 @@ Rscript entrypoint.R piecewise-dataset-interaction \
 Subtype-specific smoke test:
 
 ```bash
-Rscript entrypoint.R piecewise-subtype-specific \
+./scripts/run_rscript_project.sh entrypoint.R piecewise-subtype-specific \
   --dataset1-expr-file test_data/tcga_expression.tsv \
   --dataset1-meta-file test_data/tcga_metadata.csv \
   --dataset2-expr-file test_data/metabric_expression.tsv \
@@ -79,7 +79,7 @@ Rscript entrypoint.R piecewise-subtype-specific \
 Alternative single-cohort smoke test:
 
 ```bash
-Rscript entrypoint.R single-cohort-survival \
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-survival \
   --expr-file test_data/tcga_expression.tsv \
   --meta-file test_data/tcga_metadata.csv \
   --features Signature \
@@ -90,7 +90,7 @@ Rscript entrypoint.R single-cohort-survival \
 Detectable-versus-undetectable smoke test:
 
 ```bash
-Rscript entrypoint.R single-cohort-survival \
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-survival \
   --expr-file test_data/tcga_expression.tsv \
   --meta-file test_data/tcga_metadata_no_subtype.csv \
   --features GENE_D \
@@ -109,7 +109,7 @@ The maintained driver also accepts `--include-groups Undetectable,Detectable` as
 Single-cohort reporting heatmap smoke test:
 
 ```bash
-Rscript entrypoint.R single-cohort-reporting-bundle \
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-reporting-bundle \
   --input-run-dir results/smoke_test_single_cohort \
   --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv
 ```
@@ -130,7 +130,7 @@ The subgroup-summary fixture uses the shared downstream heatmap contract:
 GBM/LGG p53beta adjusted-effects forest fixture:
 
 ```bash
-RENV_CONFIG_AUTOLOADER_ENABLED=FALSE Rscript entrypoint.R subgroup-forest-bundle \
+./scripts/run_rscript_project.sh entrypoint.R subgroup-forest-bundle \
   --subgroup-summary-table test_data/gbm_lgg_p53beta_adjusted_effects_subgroup_summary.csv \
   --subgroup-type-filter survival_model \
   --output-dir results/validation_gbm_lgg_adjusted_forest
@@ -139,7 +139,7 @@ RENV_CONFIG_AUTOLOADER_ENABLED=FALSE Rscript entrypoint.R subgroup-forest-bundle
 GBM/LGG p53beta interaction forest fixture:
 
 ```bash
-RENV_CONFIG_AUTOLOADER_ENABLED=FALSE Rscript entrypoint.R subgroup-forest-bundle \
+./scripts/run_rscript_project.sh entrypoint.R subgroup-forest-bundle \
   --subgroup-summary-table test_data/gbm_lgg_p53beta_interactions_subgroup_summary.csv \
   --subgroup-type-filter interaction_model \
   --output-dir results/validation_gbm_lgg_interaction_forest

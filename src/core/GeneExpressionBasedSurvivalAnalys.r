@@ -77,12 +77,12 @@ analyze_survival_expression <- function(
   event_col = "event",
   time_col = "time",
   clinical_covariates = NULL,
-  split_method = c("quartiles", "tertiles", "median", "percentiles", "detectable"),
+  split_method = c("tertiles", "quartiles", "median", "percentiles", "detectable"),
   percentile_cutoffs = c(25, 75),
   detection_threshold = 0,
   signature_aggregation = c("sum", "mean"),
-  signature_continuous_cohort = c("grouped", "all"),
-  include_groups = c("low", "high"),
+  signature_continuous_cohort = c("all", "grouped"),
+  include_groups = c("low", "mid", "high"),
   steps_to_run = c("individual+covariates", "individual", "signature+covariates", 
                    "signature", "lasso", "km_individual"),
   fdr_threshold = 0.05,
@@ -150,9 +150,10 @@ analyze_survival_expression <- function(
   
   default_plot_params <- list(
         # Colors & labels (kept compatible with your version)
-        color_low = "#377eb8", # Vivid Blue
-        color_mid = "#4daf4a", # Green
-        color_high = "#e41a1c", # Deep Red
+        # Okabe-Ito colors remain distinct for common color-vision deficiencies.
+        color_low = "#0072B2", # Blue
+        color_mid = "#009E73", # Bluish green
+        color_high = "#D55E00", # Vermillion
   label_low = "Low",
   label_mid = "Mid",
   label_high = "High",
@@ -178,7 +179,10 @@ analyze_survival_expression <- function(
 
 
         # Risk table, median line, censor plot toggles
+        # Confidence ribbons remain optional because overlapping bands can
+        # obscure multi-group curves. The model CI is still reported below.
         show_confidence_interval = FALSE,
+        confidence_interval_alpha = 0.12,
         show_risk_table = FALSE,
         risk_table_fontsize = 5,
         show_censor_plot = FALSE, # (aka ncensor.plot)
@@ -500,6 +504,7 @@ analyze_survival_expression <- function(
       censor.shape = local_plot_params$censor_shape %||% 124,
       censor.size = local_plot_params$censor_size %||% 2.4,
       conf.int = local_plot_params$show_confidence_interval,
+      conf.int.alpha = local_plot_params$confidence_interval_alpha %||% 0.12,
       risk.table = local_plot_params$show_risk_table,
       risk.table.col = "strata",
       risk.table.fontsize = local_plot_params$risk_table_fontsize %||% 5,

@@ -1,3 +1,12 @@
+# 2026-10-23
+
+- changed maintained single-cohort defaults to low/mid/high tertiles for Kaplan-Meier displays and all eligible samples for continuous signature Cox models
+- updated the reusable core function to mirror the maintained CLI defaults for programmatic callers
+- improved reusable KM styling with accessible group colors, censoring marks, group sizes, and compact continuous/grouped model summaries
+- added full adjusted-model forest reporting with the signature contrasts and every retained covariate coefficient across completed endpoints
+- refreshed the README demonstration using a public METABRIC PAM50 proliferation-module example in the expected review order: OS KM, PFI KM, endpoint table, overall forest, then full adjusted-model forest
+- re-ran the maintained single-cohort and reporting-bundle smoke paths with the project-local runner; expected tiny-fixture Cox convergence and upstream ggpubr deprecation warnings remain non-fatal
+
 # 2026-04-29
 
 - added explicit signature score aggregation (`sum` or `mean`) and continuous-model cohort selection (`grouped` or `all`) to the maintained single-cohort CLI

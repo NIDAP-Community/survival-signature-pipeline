@@ -48,14 +48,45 @@ The repository's container-validation workflow runs a native image smoke test an
 
 ## Example Output
 
+![Overall-survival Kaplan-Meier plot for the PAM50 proliferation-module demonstration](assets/pam50_proliferation_metabric_os_km.png)
+
+This unweighted, 11-gene PAM50 proliferation-module demonstration in METABRIC
+starts with the OS Kaplan-Meier display. It shows unadjusted low-, mid-, and
+high-signature tertiles, censoring marks, group sizes, and a compact model
+summary. Continuous-score estimates use all eligible samples.
+
+![Progression-free-interval Kaplan-Meier plot for the PAM50 proliferation-module demonstration](assets/pam50_proliferation_metabric_pfi_km.png)
+
+The PFI display uses the same signature and tertile definition, so users can
+review both standard endpoints before comparing their model summaries.
+
+### Overall Effect Table
+
+The compact table below reports the grouped high-versus-low-tertile comparison
+for each endpoint. It complements, rather than replaces, the all-sample
+continuous Cox estimates shown in the KM statistics panels.
+
+| Endpoint | Model | Comparison | HR | 95% CI | p value |
+| --- | --- | --- | ---: | --- | ---: |
+| OS | Unadjusted | High vs Low | 1.623 | [1.374, 1.916] | 1.21e-08 |
+| OS | Adjusted | High vs Low | 1.259 | [1.030, 1.540] | 0.025 |
+| PFI | Unadjusted | High vs Low | 3.097 | [2.412, 3.975] | 7.35e-19 |
+| PFI | Adjusted | High vs Low | 2.058 | [1.531, 2.767] | 1.74e-06 |
+
 ![Overall forest plot for the PAM50 proliferation-module demonstration](assets/pam50_proliferation_metabric_overall_forest.png)
 
-This overall forest plot comes from an unweighted, 11-gene PAM50
-proliferation-module demonstration in METABRIC. It shows unadjusted and
-covariate-adjusted high-versus-low signature effects for both OS and PFI. It
-demonstrates the reporting layout only; it is not an official PAM50 classifier
-or a clinical prediction model. Review proportional-hazards and
-time-dependent diagnostic outputs before interpreting any forest plot.
+The overall forest plot is the visual counterpart to the endpoint table. It
+summarizes unadjusted and covariate-adjusted high-versus-low signature effects
+for OS and PFI.
+
+![Full adjusted Cox-model forest for the PAM50 proliferation-module demonstration](assets/pam50_proliferation_metabric_full_adjusted_forest.png)
+
+The full adjusted-model forest then shows the signature's mid- and high-tertile
+effects against the low-tertile reference, together with every retained
+covariate coefficient for OS and PFI. These figures demonstrate the reporting
+layout only; they are not an official PAM50 classifier or a clinical prediction
+model. Review proportional-hazards and time-dependent diagnostic outputs before
+interpreting a grouped KM contrast or forest plot.
 
 ## Input Files
 
@@ -137,7 +168,7 @@ For a real run, make the feature, endpoint, covariate, and output choices explic
 
 Use `--features Signature` only when `--signature-genes` supplies the feature members. To restrict an analysis to a metadata-defined group, add `--group-column <column>` and `--group-filter <value1,value2>`.
 
-Signature genes are z-scored within the eligible cohort. The default score is their sum and continuous signature models use the same groups shown in the Kaplan-Meier plot. Use `--signature-aggregation mean` and/or `--signature-continuous-cohort all` when the analysis specification instead calls for an average score or continuous Cox estimation across all eligible samples.
+Signature genes are z-scored within the eligible cohort. The default score is their sum. The default Kaplan-Meier display uses low/mid/high tertiles, while continuous signature Cox models use **all eligible samples**; this preserves the full score information for the primary estimate even when a grouped plot is shown. Use `--signature-aggregation mean` when the analysis specification calls for an average score, or `--signature-continuous-cohort grouped` only when a deliberately group-restricted continuous analysis is required.
 
 Use `--signature-label <display_label>` to give a signature plot a clear human-readable title without changing the score calculation.
 
@@ -271,7 +302,12 @@ The single-cohort driver writes its endpoint analyses first. With its default `-
   --output-dir results/<single_cohort_reporting_bundle>
 ```
 
-This writes `figures/figure1_single_cohort_overall_forest.png` and `.pdf`, plus a CSV and a GitHub-rendered Markdown table under `tables/`. It includes available individual-gene and signature effects for every completed endpoint; use the normal analysis defaults when this report is needed, rather than a figure-only run with `--save-results-rds false`.
+This writes the primary-effect forest and its CSV/GitHub-rendered Markdown table under `tables/`. When the upstream run has a grouped adjusted signature model, it also writes the full adjusted-model forest and table:
+
+- `figure1_single_cohort_overall_forest`: primary individual-gene and signature effects for each completed endpoint.
+- `figure2_single_cohort_full_adjusted_model_forest`: the signature comparison and every retained covariate coefficient from each endpoint's grouped adjusted Cox model. Factor levels are labeled against their model reference level.
+
+Use the normal analysis defaults when these reports are needed, rather than a figure-only run with `--save-results-rds false`.
 
 ## Help and Smoke Tests
 

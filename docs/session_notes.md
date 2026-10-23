@@ -1,5 +1,21 @@
 # Session Notes
 
+## 2026-10-23 Checkpoint: Finalized Default Presentation and Reporting
+
+- Set the maintained single-cohort default to tertile low/mid/high Kaplan-Meier displays and to `signature_continuous_cohort = all`, so the primary continuous signature Cox estimate retains every eligible sample even when an extreme-group display is selected.
+- Updated the reusable core function to use the same defaults for programmatic callers.
+- Improved reusable Kaplan-Meier rendering with accessible colors, censoring marks, visible group sizes, and compact continuous and grouped model summaries.
+- Extended the single-cohort reporting bundle with a full adjusted Cox-model forest and paired CSV/Markdown term table, covering signature contrasts and every retained covariate across completed endpoints.
+- Created a public METABRIC PAM50 proliferation-module README demonstration with OS and PFI KM displays, an overall endpoint table, an overall forest, and a full adjusted-model forest. The run-scoped source artifacts remain ignored under `results/`; only demonstration assets are tracked.
+- Updated local smoke-test and GBM/LGG handoff commands to use `scripts/run_rscript_project.sh`, the maintained noninteractive-safe runner.
+- Re-ran the canonical maintained single-cohort smoke path and the reporting-bundle smoke path. Both produced required provenance, RDS, table, and forest artifacts. The tiny synthetic cohort retains its expected Cox nonconvergence warning, and ggpubr emits an upstream line-aesthetic deprecation warning.
+
+### Current Validation Boundary
+
+- The final METABRIC example was generated locally from prepared public-cohort files and validates the reporting presentation, not clinical utility.
+- OS and PFI proportional-hazards diagnostics flagged violations in that demonstration; users should inspect the generated time-dependent outputs rather than interpret a static grouped contrast alone.
+- Container helpers and CI coverage exist. A fresh local Docker smoke test remains pending available Docker disk resources; do not delete Docker state or treat a local image test as AWS deployment evidence.
+
 ## Summary
 
 This session moved the repository from an architectural assessment into a runnable first-wave standardized state. The repo now has one maintained root CLI, separate maintained single-cohort and pooled reporting modes, a shared downstream subgroup-summary contract, a small shared reporting utility layer, and project-local reproducibility via renv.

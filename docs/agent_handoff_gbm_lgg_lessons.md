@@ -41,7 +41,7 @@ Use the GBM/LGG p53beta field report and fixture tables to generalize the surviv
 At minimum, the optimizing agent should be able to run:
 
 ```bash
-RENV_CONFIG_AUTOLOADER_ENABLED=FALSE Rscript entrypoint.R subgroup-forest-bundle \
+./scripts/run_rscript_project.sh entrypoint.R subgroup-forest-bundle \
   --subgroup-summary-table test_data/gbm_lgg_p53beta_adjusted_effects_subgroup_summary.csv \
   --subgroup-type-filter survival_model \
   --output-dir results/validation_gbm_lgg_adjusted_forest
@@ -50,7 +50,7 @@ RENV_CONFIG_AUTOLOADER_ENABLED=FALSE Rscript entrypoint.R subgroup-forest-bundle
 and:
 
 ```bash
-RENV_CONFIG_AUTOLOADER_ENABLED=FALSE Rscript entrypoint.R subgroup-forest-bundle \
+./scripts/run_rscript_project.sh entrypoint.R subgroup-forest-bundle \
   --subgroup-summary-table test_data/gbm_lgg_p53beta_interactions_subgroup_summary.csv \
   --subgroup-type-filter interaction_model \
   --output-dir results/validation_gbm_lgg_interaction_forest
