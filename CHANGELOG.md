@@ -1,5 +1,7 @@
 # 2026-04-29
 
+- added a portable OCI container build, `/data` to `/output` runtime contract, Docker helpers, and a canonical container smoke test for integration readiness
+- added non-publishing CI validation for a native container smoke test and a separate ARM64 image build
 - added `single-cohort-analysis-plan`, a generic CSV-driven maintained workflow for overall, filtered-subgroup, and feature-by-group interaction Cox models
 - added a documented analysis-plan schema with explicit optional endpoint mappings, signature definitions, covariates, filters, and interaction references
 - emit analysis-plan primary effects and interaction terms through the shared subgroup-summary contract, with per-row status and full-coefficient outputs

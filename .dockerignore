@@ -1,0 +1,18 @@
+# Local repository state and generated analysis results are not part of a
+# reproducible container build. Input data are mounted at runtime under /data.
+.git/
+.github/
+results/
+local_reference/
+renv/library/
+renv/staging/
+Rplots.pdf
+.Rhistory
+.RData
+.Ruserdata
+.DS_Store
+
+# Large local source inputs are intentionally untracked and must never become
+# image layers. The tracked synthetic fixtures remain available for smoke tests.
+test_data/IODC-0001-TCGA-BRCA.normalized_counts.primary.tsv
+test_data/Survival_subtype_joined_metadata.primary.csv

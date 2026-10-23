@@ -34,8 +34,11 @@ The repository currently has one strong reusable core, a small but real utility 
 - entrypoint.R is the canonical root CLI surface and dispatches to maintained workflows.
 - renv/ plus renv.lock are now present and the repository can be restored into a project-local R environment.
 - test_data/ now includes one validated canonical smoke-test input pair for the single-cohort workflow.
+- container/ now contains a portable OCI build, Docker mount helpers, and a canonical container smoke test for the maintained root CLI.
 
 This means the repository is now structurally standardized enough to have a single runnable entrypoint, while still preserving the distinction between maintained workflows and older wrappers.
+
+The container is deliberately a portable batch-analysis boundary, not an AWS application. It has no database or cloud credentials, consumes mounted `/data` inputs, and writes mounted `/output` artifacts. Future AWS/OncoChat work should stage and validate data outside the image rather than placing integration logic in the reusable analysis repository.
 
 ## Layer Boundaries
 

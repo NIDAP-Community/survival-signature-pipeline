@@ -222,3 +222,11 @@ This session moved the repository from an architectural assessment into a runnab
 - Added `scripts/run_rscript_project.sh` as the maintained local execution path: after `renv::restore()`, it disables the autoloader and explicitly selects the restored project library.
 - Restored the locked plotting stack locally and reran the full canonical KM smoke test successfully through the new runner path; the only warnings were expected tiny-fixture Cox convergence and an upstream ggpubr aesthetic deprecation warning.
 - Updated `entrypoint.R` to shell-quote each independently parsed child argument before `system2()` forwarding, preserving quoted labels containing spaces.
+
+## Portable Container Follow-Up
+
+- Added a portable OCI image for the maintained root CLI, using the locked R 4.5.1 environment and `renv.lock` at image-build time.
+- Defined a narrow runtime contract: read-only `/data` inputs, writable `/output` artifacts, non-root default execution, and no embedded cloud credentials or database access.
+- Added local build, mounted Docker-run, and canonical container smoke-test helpers plus detailed contract documentation.
+- Kept AWS/OncoChat staging, IAM, infrastructure, and task orchestration out of this repository so the image remains reusable as an upstream analysis component.
+- Added non-publishing CI coverage for a native container smoke test and an ARM64 container build; release image publication remains intentionally out of scope.

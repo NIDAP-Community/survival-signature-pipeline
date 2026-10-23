@@ -33,6 +33,19 @@ List every maintained workflow and its short description:
 ./scripts/run_rscript_project.sh entrypoint.R list
 ```
 
+### Container setup
+
+The same maintained CLI is available as a portable OCI image. Build the image, then run the containerized smoke test:
+
+```bash
+container/build_docker.sh survival-signature-pipeline:local
+container/smoke_test.sh survival-signature-pipeline:local
+```
+
+Use `TARGET_PLATFORM=linux/arm64` or `TARGET_PLATFORM=linux/amd64` when building for a specific deployment target. The image reads caller-provided files from `/data` and writes run artifacts to `/output`; see [the container contract](docs/container_contract.md) for a Docker invocation and integration boundary.
+
+The repository's container-validation workflow runs a native image smoke test and builds the ARM64 target on pull requests and pushes to `main`; it does not publish an image.
+
 ## Input Files
 
 ### Expression matrix
