@@ -44,7 +44,7 @@ container/smoke_test.sh survival-signature-pipeline:local
 
 Use `TARGET_PLATFORM=linux/arm64` or `TARGET_PLATFORM=linux/amd64` when building for a specific deployment target. The image reads caller-provided files from `/data` and writes run artifacts to `/output`; see [the container contract](docs/container_contract.md) for a Docker invocation and integration boundary.
 
-The repository's container-validation workflow runs a native image smoke test and builds the ARM64 target on pull requests and pushes to `main`; it does not publish an image.
+The repository's container-validation workflow runs a native image smoke test and builds the ARM64 target on pull requests and pushes to `main`; it does not publish an image. A calling application should follow the [AWS adapter contract](docs/aws_adapter_contract.md) for validated request handling, data staging, and artifact collection.
 
 ## Input Files
 
@@ -70,7 +70,15 @@ Sample_2,0,42,0,42,61,Treatment
 
 `OS`/`OS_time` and `PFI`/`PFI_time` are the default endpoint mappings. Change them with the corresponding CLI flags. The analysis-plan workflow also allows a row to define any explicit `event_column` and `time_column` pair.
 
+`single-cohort-survival` analyzes both `OS` and `PFI` by default (`--endpoints OS,PFI`). Pass `--endpoints OS` or `--endpoints PFI` only when intentionally restricting a run to one endpoint.
+
 Prepare filtering and sample inclusion upstream. Maintained drivers analyze the rows supplied to them; they do not impose a tumor-type or sample-type filter.
+
+### Gene identifiers
+
+The maintained gene-consuming workflows can normalize user-supplied human gene symbols with the pinned `l2psupp::updategenes()` resolver (`--gene-resolution l2p`). This opt-in behavior leaves existing calls unchanged. The expression matrix is never renamed or rewritten. An exact input row is preferred; otherwise, an updated symbol is used only when it matches an existing expression row (in both matrices for a two-cohort workflow). Every run writes `tables/gene_identifier_resolution.csv`, preserving the submitted name, L2P result, package version, matched expression row, and any unresolved gene.
+
+`--gene-resolution none` is the default for backward compatibility; use it when requested identifiers are already the intended expression-row identifiers. The run fails rather than dropping an unresolved requested gene or double-counting two inputs that resolve to the same row.
 
 ## Choose a Workflow
 
@@ -108,6 +116,7 @@ For a real run, make the feature, endpoint, covariate, and output choices explic
   --meta-file <metadata.csv> \
   --sample-column <sample_id_column> \
   --gene-column <gene_id_column> \
+  --gene-resolution l2p \
   --features <gene_or_Signature> \
   --signature-genes <gene1,gene2,gene3> \
   --endpoints OS,PFI \
@@ -118,6 +127,10 @@ For a real run, make the feature, endpoint, covariate, and output choices explic
 Use `--features Signature` only when `--signature-genes` supplies the feature members. To restrict an analysis to a metadata-defined group, add `--group-column <column>` and `--group-filter <value1,value2>`.
 
 Signature genes are z-scored within the eligible cohort. The default score is their sum and continuous signature models use the same groups shown in the Kaplan-Meier plot. Use `--signature-aggregation mean` and/or `--signature-continuous-cohort all` when the analysis specification instead calls for an average score or continuous Cox estimation across all eligible samples.
+
+Use `--signature-label <display_label>` to give a signature plot a clear human-readable title without changing the score calculation.
+
+`--run-ph-checks false --run-time-dependent false --save-results-rds false` is appropriate for a fast exploratory figure run. Keep the defaults for a complete diagnostic analysis.
 
 ### Detectable versus undetectable genes
 
@@ -211,11 +224,13 @@ results/<run_name>/
 ├── logs/
 │   └── sessionInfo.txt
 ├── tables/
+│   ├── gene_identifier_resolution.csv          # submitted-to-expression gene mapping
 │   ├── model_coefficients.csv                 # analysis-plan workflow
 │   ├── subgroup_effect_summary.csv            # analysis-plan/subgroup workflows
 │   └── ...
 ├── figures/                                   # reporting and forest workflows
 └── OS/ or PFI/                                # single-cohort endpoint outputs
+    ├── <endpoint>_summary.md                  # GitHub-rendered model tables, including covariates
     ├── adjusted_model_full_coefficients.csv
     ├── grouped_gene_cox_results.csv
     ├── results_univariate.csv
@@ -223,6 +238,18 @@ results/<run_name>/
 ```
 
 Output names vary by workflow. Run `--help` before a new workflow and retain the corresponding `RUN_METADATA.md` with any result shared outside the repository.
+
+### Overall forest plot for a single-cohort run
+
+The single-cohort driver writes its endpoint analyses first. With its default `--save-results-rds true`, create an overall forest plot from that completed run with:
+
+```bash
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-reporting-bundle \
+  --input-run-dir results/<single_cohort_run> \
+  --output-dir results/<single_cohort_reporting_bundle>
+```
+
+This writes `figures/figure1_single_cohort_overall_forest.png` and `.pdf`, plus a CSV and a GitHub-rendered Markdown table under `tables/`. It includes available individual-gene and signature effects for every completed endpoint; use the normal analysis defaults when this report is needed, rather than a figure-only run with `--save-results-rds false`.
 
 ## Help and Smoke Tests
 

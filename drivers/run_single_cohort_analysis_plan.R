@@ -11,6 +11,7 @@ suppressPackageStartupMessages({
 })
 
 source("src/utilities/cli_helpers.R")
+source("src/utilities/gene_identifier_resolution.R")
 source("src/utilities/run_provenance_guardrails.R")
 
 cli_defaults <- list(
@@ -20,6 +21,7 @@ cli_defaults <- list(
   plan_file = file.path("test_data", "single_cohort_analysis_plan.csv"),
   sample_column = "sampnames",
   gene_column = "Gene",
+  gene_resolution = "none",
   os_event_column = "OS",
   os_time_column = "OS_time",
   pfi_event_column = "PFI",
@@ -37,6 +39,7 @@ print_usage <- function() {
       "Runs generic overall, filtered-subgroup, and feature-by-group interaction Cox models described in a CSV plan.",
       "The plan, not the driver, defines cohort-specific metadata columns, filters, covariates, and interaction axes.",
       "Each successful model emits a shared subgroup-summary row; interaction rows are marked subgroup_type=interaction_model.",
+      "gene_resolution=l2p opt-in updates user-supplied human gene symbols and writes an auditable mapping table without changing expression identifiers.",
       "For endpoints other than OS or PFI, provide event_column and time_column in the plan."
     )
   )
@@ -166,6 +169,27 @@ build_feature_values <- function(plan_row, expression_data, gene_column) {
   values <- colMeans(signature_matrix, na.rm = FALSE)
   names(values) <- sample_columns
   values
+}
+
+resolve_plan_gene_identifiers <- function(plan, expression_gene_ids, mode) {
+  gene_inputs <- c(
+    plan$feature[plan$feature_type == "gene"],
+    unlist(lapply(plan$signature_genes[plan$feature_type == "signature"], parse_plan_list), use.names = FALSE)
+  )
+  gene_inputs <- unique(gene_inputs)
+  resolution_table <- resolve_requested_gene_identifiers(gene_inputs, expression_gene_ids, mode)
+  assert_gene_resolution_is_unambiguous(resolution_table)
+
+  plan$feature_requested <- plan$feature
+  plan$signature_genes_requested <- plan$signature_genes
+  gene_rows <- plan$feature_type == "gene"
+  plan$feature[gene_rows] <- replace_requested_gene_identifiers(plan$feature[gene_rows], resolution_table)
+  signature_rows <- plan$feature_type == "signature"
+  plan$signature_genes[signature_rows] <- vapply(plan$signature_genes[signature_rows], function(value) {
+    paste(replace_requested_gene_identifiers(parse_plan_list(value), resolution_table), collapse = ",")
+  }, character(1))
+
+  list(plan = plan, resolution_table = resolution_table)
 }
 
 prepare_model_data <- function(plan_row, expression_data, metadata, options) {
@@ -328,6 +352,7 @@ opt <- parse_standard_cli_args(
   workflow_name = "single-cohort-analysis-plan",
   help_printer = print_usage
 )
+opt$gene_resolution <- normalize_gene_resolution_mode(opt$gene_resolution)
 assert_output_guardrails(opt$output_dir)
 cli_assert_existing_input_files(
   input_paths = c(expr_file = opt$expr_file, meta_file = opt$meta_file, plan_file = opt$plan_file),
@@ -342,9 +367,16 @@ if (!opt$gene_column %in% names(expression_data)) stop("Expression data missing 
 if (anyDuplicated(expression_data[[opt$gene_column]])) stop("Expression gene column contains duplicate feature identifiers.")
 
 plan <- read_analysis_plan(opt$plan_file)
+resolved_plan <- resolve_plan_gene_identifiers(
+  plan = plan,
+  expression_gene_ids = expression_data[[opt$gene_column]],
+  mode = opt$gene_resolution
+)
+plan <- resolved_plan$plan
 dir.create(opt$output_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(opt$output_dir, "tables"), recursive = TRUE, showWarnings = FALSE)
 readr::write_csv(plan, file.path(opt$output_dir, "tables", "analysis_plan_resolved.csv"))
+write_gene_resolution_report(resolved_plan$resolution_table, opt$output_dir)
 
 effect_rows <- list()
 coefficient_rows <- list()
@@ -397,7 +429,13 @@ write_run_metadata_guardrail(
   purpose = "Run a declarative single-cohort survival analysis plan and emit shared subgroup-summary results.",
   driver = "drivers/run_single_cohort_analysis_plan.R",
   inputs = list(expr_file = opt$expr_file, meta_file = opt$meta_file, plan_file = opt$plan_file),
-  parameters = list(sample_column = opt$sample_column, gene_column = opt$gene_column, plan_rows = nrow(plan)),
+  parameters = list(
+    sample_column = opt$sample_column,
+    gene_column = opt$gene_column,
+    gene_resolution = opt$gene_resolution,
+    gene_resolution_report = file.path("tables", "gene_identifier_resolution.csv"),
+    plan_rows = nrow(plan)
+  ),
   notes = c(
     "Plan rows are independent model specifications; failed rows are recorded in tables/analysis_plan_status.csv.",
     "p_value_bh is adjusted within feature, endpoint, and analysis_type among emitted primary effect rows."

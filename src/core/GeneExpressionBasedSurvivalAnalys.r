@@ -1333,7 +1333,7 @@ analyze_survival_expression <- function(
         cox_adj = if (!is.null(cox_adj)) summary(cox_adj) else NULL,
         cont_unadj = sig_cont_unadj_sum,
         cont_adj = sig_cont_adj_sum,
-        main_title = paste(plot_params$plot_title, "- Signature"),
+        main_title = paste(plot_params$plot_title, "-", plot_params$signature_label %||% "Signature"),
         local_plot_params = sig_plot_params,
         attempted_adj = ("signature+covariates" %in% steps_to_run && !is.null(clinical_covariates) && length(clinical_covariates) > 0),
         adj_reason = if (is.null(cox_adj) && ("signature+covariates" %in% steps_to_run)) {

@@ -7,6 +7,11 @@
 ARG R_VERSION=4.5.1
 FROM rocker/r-ver:${R_VERSION}
 
+# l2psupp supplies updategenes() for auditable normalization of user-entered
+# human gene symbols. Pin the upstream repository revision instead of a mutable
+# branch so the container's resolver database is reproducible.
+ARG L2P_COMMIT=ab389bc978441f1893414da7a07e803bea971205
+
 ARG VCS_REF=unknown
 ARG BUILD_DATE=unknown
 LABEL org.opencontainers.image.title="survival-signature-pipeline" \
@@ -45,6 +50,7 @@ RUN apt-get update \
 COPY renv.lock ./
 COPY renv/activate.R renv/settings.json ./renv/
 RUN Rscript --vanilla -e 'install.packages("renv", repos = "https://cloud.r-project.org"); renv::restore(project = "/app", prompt = FALSE)'
+RUN Rscript --vanilla -e "install.packages('https://github.com/CCBR/l2p/raw/${L2P_COMMIT}/l2psupp_0.0-14.tar.gz', repos = NULL); stopifnot(as.character(utils::packageVersion('l2psupp')) == '0.0.14'); stopifnot(l2psupp::updategenes('CDCA1')\$newname[[1]] == 'NUF2')"
 
 COPY . ./
 COPY container/entrypoint.sh /usr/local/bin/survival-pipeline

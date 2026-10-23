@@ -69,6 +69,10 @@ An AWS integration may stage approved inputs to `/data` and collect `/output` ar
 
 For deployment reproducibility, record the immutable OCI image digest together with the existing `RUN_METADATA.md` file. Do not treat a locally successful container run as evidence of a deployed image, AWS task, or release.
 
+For the required adapter-side request validation, input staging, artifact
+collection, and acceptance checks, see the
+[AWS adapter contract](aws_adapter_contract.md).
+
 ## Continuous Validation
 
 `.github/workflows/container.yml` builds and smoke-tests the native Linux image and separately builds the ARM64 image on pull requests and pushes to `main`. It deliberately has no registry credentials and does not publish an image. Image publication, registry retention, signing, vulnerability policy, and AWS deployment remain release/integration responsibilities.

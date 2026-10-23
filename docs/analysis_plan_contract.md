@@ -10,7 +10,7 @@ The driver deliberately has no disease, subtype, cohort-name, or project-specifi
 | --- | --- |
 | `analysis_id` | Unique, stable identifier for one model specification. |
 | `analysis_type` | `overall`, `subgroup`, or `interaction`. |
-| `feature` | Expression-row identifier for `feature_type=gene`, or a human-readable label for `feature_type=signature`. |
+| `feature` | User-supplied gene identifier for `feature_type=gene`, or a human-readable label for `feature_type=signature`. Gene identifiers are resolved against expression rows before modeling. |
 | `endpoint` | `OS` or `PFI` when using the CLI endpoint defaults; any other label is allowed when the row supplies both `event_column` and `time_column`. |
 
 ## Optional Columns
@@ -18,7 +18,7 @@ The driver deliberately has no disease, subtype, cohort-name, or project-specifi
 | Column | Meaning |
 | --- | --- |
 | `feature_type` | `gene` (default) or `signature`. |
-| `signature_genes` | Comma-separated expression-row identifiers; required for a signature. The score is the per-sample arithmetic mean. |
+| `signature_genes` | Comma-separated user-supplied gene identifiers; required for a signature. They are resolved against expression rows before modeling. The score is the per-sample arithmetic mean. |
 | `covariates` | Comma-separated raw metadata column names. `none` or blank means unadjusted. Missing requested columns fail that plan row rather than silently changing its model. |
 | `filter_column`, `filter_values` | Optional exact-match filter applied before fitting; both are required together. Values are comma-separated. Useful for a subgroup or a restricted interaction analysis. |
 | `subgroup_type`, `subgroup_label` | Display metadata for an `overall` or `subgroup` primary-effect row. |
@@ -34,6 +34,7 @@ The driver deliberately has no disease, subtype, cohort-name, or project-specifi
 The driver writes run-scoped outputs under `results/`:
 
 - `tables/analysis_plan_resolved.csv`: resolved input plan.
+- `tables/gene_identifier_resolution.csv`: submitted gene identifiers, their L2P update result when enabled, and the expression rows actually used.
 - `tables/analysis_plan_status.csv`: one completed or failed status row per plan row.
 - `tables/model_coefficients.csv`: every fitted Cox coefficient.
 - `tables/subgroup_effect_summary.csv`: primary feature-effect rows and interaction rows in the shared subgroup-summary contract.
@@ -53,3 +54,5 @@ Invalid plan structure fails before execution. A model-specific issue—such as 
 ```
 
 The synthetic [`test_data/single_cohort_analysis_plan.csv`](../test_data/single_cohort_analysis_plan.csv) is an interface fixture, not a recommended scientific analysis design.
+
+`--gene-resolution l2p` opts into the pinned `l2psupp::updategenes()` resolver; `none` remains the default for backward compatibility. The matrix feature identifiers are not rewritten. An exact user input matches first; otherwise the updated symbol must match an existing row.

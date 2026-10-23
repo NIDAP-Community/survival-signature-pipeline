@@ -8,6 +8,7 @@ suppressPackageStartupMessages({
 })
 
 source("src/utilities/cli_helpers.R")
+source("src/utilities/gene_identifier_resolution.R")
 source("src/utilities/run_provenance_guardrails.R")
 
 cli_defaults <- list(
@@ -27,6 +28,7 @@ cli_defaults <- list(
   dataset1_age_column = "Diagnosis_Age",
   dataset2_age_column = "Diagnosis_Age",
   gene_column = "Gene",
+  gene_resolution = "none",
   signature_genes = "GENE_A,GENE_B,GENE_C,GENE_D",
   os_event_column = "OS",
   os_time_column = "OS_time",
@@ -49,6 +51,7 @@ print_usage <- function() {
       "This workflow expects two harmonized datasets and models dataset interaction terms across them.",
       "Endpoint columns are configurable through the OS/PFI event and time flags.",
       "Inputs are expected to be post-filtered upstream; the maintained driver does not apply an internal primary-only sample filter.",
+      "gene_resolution=l2p opt-in updates user-supplied human gene symbols and requires a matched row in both datasets.",
       "dataset1_label and dataset2_label control the dataset titles written into pooled outputs."
     ),
     aliases = c(
@@ -94,6 +97,7 @@ opt$adjust_covariates <- cli_parse_enum_flag(
   flag_name = "adjust_covariates",
   normalize = "lower"
 )
+opt$gene_resolution <- normalize_gene_resolution_mode(opt$gene_resolution)
 feature_list <- cli_parse_csv_list(opt$features)
 endpoint_list <- cli_parse_csv_list(opt$endpoints, uppercase = TRUE)
 signature_genes <- cli_parse_csv_list(opt$signature_genes)
@@ -359,6 +363,20 @@ dataset1_expr <- read_expression_table(opt$dataset1_expr_file, opt$gene_column)
 dataset2_expr <- read_expression_table(opt$dataset2_expr_file, opt$gene_column)
 dataset1_meta <- read_metadata_table(opt$dataset1_meta_file)
 dataset2_meta <- read_metadata_table(opt$dataset2_meta_file)
+
+individual_features <- feature_list[tolower(feature_list) != "signature"]
+requested_genes <- unique(c(individual_features, if (any(tolower(feature_list) == "signature")) signature_genes else character(0)))
+gene_resolution_table <- resolve_requested_gene_identifiers(
+  requested_genes = requested_genes,
+  expression_gene_ids = intersect(dataset1_expr[[opt$gene_column]], dataset2_expr[[opt$gene_column]]),
+  mode = opt$gene_resolution
+)
+assert_gene_resolution_is_unambiguous(gene_resolution_table)
+feature_list[tolower(feature_list) != "signature"] <- replace_requested_gene_identifiers(individual_features, gene_resolution_table)
+if (any(tolower(feature_list) == "signature")) {
+  signature_genes <- replace_requested_gene_identifiers(signature_genes, gene_resolution_table)
+}
+write_gene_resolution_report(gene_resolution_table, opt$output_dir)
 
 result_rows <- list()
 term_rows <- list()
@@ -668,6 +686,8 @@ write_run_metadata_guardrail(
   ),
   parameters = list(
     gene_column = opt$gene_column,
+    gene_resolution = opt$gene_resolution,
+    gene_resolution_report = file.path("tables", "gene_identifier_resolution.csv"),
     signature_genes = paste(signature_genes, collapse = ","),
     subtype = opt$subtype,
     adjust_covariates = opt$adjust_covariates,

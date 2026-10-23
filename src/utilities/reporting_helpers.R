@@ -11,11 +11,36 @@ ensure_reporting_output_dirs <- function(output_dir) {
   dir.create(file.path(output_dir, "logs"), recursive = TRUE, showWarnings = FALSE)
 }
 
+markdown_table_lines <- function(df) {
+  # GitHub Markdown treats a vertical bar as a column boundary. Escape it here so
+  # labels copied from source metadata cannot break a rendered result table.
+  escape_cell <- function(value) {
+    value <- as.character(value)
+    value[is.na(value)] <- ""
+    gsub("|", paste0("\\", "|"), value, fixed = TRUE)
+  }
+
+  if (!is.data.frame(df) || !ncol(df)) {
+    return(character(0))
+  }
+
+  table_values <- as.data.frame(lapply(df, escape_cell), stringsAsFactors = FALSE)
+  # as.data.frame() repairs non-syntactic names by default; restore the labels
+  # supplied by the report table so GitHub shows reader-facing headings.
+  names(table_values) <- names(df)
+  header <- paste0("| ", paste(escape_cell(names(table_values)), collapse = " | "), " |")
+  separator <- paste0("| ", paste(rep("---", ncol(table_values)), collapse = " | "), " |")
+  rows <- if (nrow(table_values)) {
+    apply(table_values, 1, function(row) paste0("| ", paste(row, collapse = " | "), " |"))
+  } else {
+    character(0)
+  }
+
+  c(header, separator, rows)
+}
+
 write_markdown_table <- function(df, file_path) {
-  header <- paste0("| ", paste(names(df), collapse = " | "), " |")
-  separator <- paste0("| ", paste(rep("---", ncol(df)), collapse = " | "), " |")
-  rows <- apply(df, 1, function(row) paste0("| ", paste(row, collapse = " | "), " |"))
-  writeLines(c(header, separator, rows), con = file_path)
+  writeLines(markdown_table_lines(df), con = file_path)
 }
 
 write_csv_and_md_table <- function(csv_df, csv_path, md_path, md_df = csv_df) {

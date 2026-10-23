@@ -7,6 +7,8 @@ suppressPackageStartupMessages({
 
 source("src/core/GeneExpressionBasedSurvivalAnalys.r")
 source("src/utilities/cli_helpers.R")
+source("src/utilities/gene_identifier_resolution.R")
+source("src/utilities/reporting_helpers.R")
 source("src/utilities/run_provenance_guardrails.R")
 
 cli_defaults <- list(
@@ -15,6 +17,7 @@ cli_defaults <- list(
   meta_file = file.path("test_data", "tcga_metadata.csv"),
   sample_column = "sampnames",
   gene_column = "Gene",
+  gene_resolution = "none",
   group_column = "",
   group_filter = "ALL",
   group_type = "subgroup",
@@ -23,6 +26,7 @@ cli_defaults <- list(
   age_column = "Diagnosis_Age",
   race_column = "race_collapsed",
   signature_genes = "GENE_A,GENE_B,GENE_C,GENE_D",
+  signature_label = "Signature",
   os_event_column = "OS",
   os_time_column = "OS_time",
   pfi_event_column = "PFI",
@@ -38,6 +42,9 @@ cli_defaults <- list(
   endpoints = "OS,PFI",
   cut_months = "60",
   run_km_individual = "true",
+  run_ph_checks = "true",
+  run_time_dependent = "true",
+  save_results_rds = "true",
   save_plots = "true",
   export_csv = "true",
   run_lasso = "false",
@@ -57,7 +64,10 @@ print_usage <- function() {
       "adjust_covariates should generally be supplied as explicit metadata column names for the current dataset.",
       "split_method=detectable performs a binary gene grouping using expression <= detection_threshold versus > detection_threshold.",
       "signature_aggregation controls whether z-scored signature genes are summed or averaged.",
+      "signature_label controls the displayed label in signature plots without changing score calculation.",
       "signature_continuous_cohort controls whether continuous signature Cox models use plotted groups or all eligible samples.",
+      "gene_resolution=l2p opt-in updates user-supplied human gene symbols with l2psupp::updategenes, while retaining a complete per-run mapping report.",
+      "run_ph_checks, run_time_dependent, and save_results_rds can be disabled for a fast figure-only run; retain them for a complete diagnostic analysis.",
       "Optional aliases are supported as a convenience only: subtype, stage, age, race.",
       "Requested covariates missing from a dataset are skipped automatically; active group filtering requires the chosen group column."
     ),
@@ -144,7 +154,73 @@ normalize_include_groups <- function(include_groups, split_method) {
   unique(normalized)
 }
 
-build_endpoint_summary <- function(endpoint_name, endpoint_dir, result, feature_list, covariate_mode) {
+format_model_term <- function(term_name, split_method = NULL, feature_name = "Signature") {
+  if (identical(term_name, "clusterC")) {
+    if (identical(split_method, "detectable")) return("Detectable vs Undetectable")
+    return("High vs Low")
+  }
+  if (identical(term_name, "clusterB")) return("Mid vs Low")
+  if (identical(term_name, "expr_val") || identical(term_name, "expr")) return(feature_name)
+  term_name
+}
+
+tidy_cox_summary <- function(model_summary, model_label, split_method = NULL, feature_name = "Signature") {
+  if (is.null(model_summary) || !inherits(model_summary, "summary.coxph") ||
+      is.null(model_summary$coefficients) || !nrow(model_summary$coefficients)) {
+    return(NULL)
+  }
+
+  coefficient_names <- rownames(model_summary$coefficients)
+  output <- data.frame(
+    Model = model_label,
+    Term = vapply(
+      coefficient_names,
+      format_model_term,
+      character(1),
+      split_method = split_method,
+      feature_name = feature_name
+    ),
+    `Hazard ratio` = report_fmt_num(model_summary$conf.int[, "exp(coef)"], 3),
+    `95% CI` = report_fmt_ci(
+      model_summary$conf.int[, "lower .95"],
+      model_summary$conf.int[, "upper .95"],
+      3
+    ),
+    `p value` = report_fmt_p(model_summary$coefficients[, "Pr(>|z|)"]),
+    N = model_summary$n,
+    Events = model_summary$nevent,
+    stringsAsFactors = FALSE,
+    row.names = NULL,
+    check.names = FALSE
+  )
+  names(output) <- c("Model", "Term", "Hazard ratio", "95% CI", "p value", "N", "Events")
+  output
+}
+
+format_feature_results <- function(results, model_label) {
+  if (is.null(results) || !nrow(results)) return(NULL)
+
+  ci_low <- if ("CI_Lower" %in% names(results)) results$CI_Lower else rep(NA_real_, nrow(results))
+  ci_high <- if ("CI_Upper" %in% names(results)) results$CI_Upper else rep(NA_real_, nrow(results))
+  p_value <- if ("P_Value" %in% names(results)) results$P_Value else rep(NA_real_, nrow(results))
+  fdr <- if ("FDR" %in% names(results)) results$FDR else rep(NA_real_, nrow(results))
+
+  output <- data.frame(
+    Feature = results$Gene,
+    Model = model_label,
+    `Hazard ratio` = report_fmt_num(results$HR, 3),
+    `95% CI` = report_fmt_ci(ci_low, ci_high, 3),
+    `p value` = report_fmt_p(p_value),
+    FDR = report_fmt_p(fdr),
+    stringsAsFactors = FALSE,
+    row.names = NULL,
+    check.names = FALSE
+  )
+  names(output) <- c("Feature", "Model", "Hazard ratio", "95% CI", "p value", "FDR")
+  output
+}
+
+build_endpoint_summary <- function(endpoint_name, endpoint_dir, result, feature_list, covariate_mode, split_method) {
   lines <- c(
     paste0("# ", endpoint_name, " Single-Cohort Summary"),
     "",
@@ -155,18 +231,28 @@ build_endpoint_summary <- function(endpoint_name, endpoint_dir, result, feature_
   )
 
   if (!is.null(result$results_univariate) && nrow(result$results_univariate)) {
-    lines <- c(lines, "## Univariate Cox", "", utils::capture.output(print(head(result$results_univariate, 10))), "")
+    feature_table <- format_feature_results(head(result$results_univariate, 10), "Continuous, unadjusted")
+    lines <- c(lines, "## Continuous Feature Cox Models", "", markdown_table_lines(feature_table), "")
   }
   if (!is.null(result$results_adjusted) && nrow(result$results_adjusted)) {
-    lines <- c(lines, "## Adjusted Cox", "", utils::capture.output(print(head(result$results_adjusted, 10))), "")
+    feature_table <- format_feature_results(head(result$results_adjusted, 10), "Continuous, adjusted")
+    lines <- c(lines, "## Covariate-Adjusted Continuous Feature Cox Models", "", markdown_table_lines(feature_table), "")
   }
   if (!is.null(result$results_signature)) {
-    lines <- c(lines, "## Signature Cox", "")
-    if (!is.null(result$results_signature$unadjusted)) {
-      lines <- c(lines, "### Unadjusted", "", utils::capture.output(print(result$results_signature$unadjusted)), "")
-    }
-    if (!is.null(result$results_signature$adjusted)) {
-      lines <- c(lines, "### Adjusted", "", utils::capture.output(print(result$results_signature$adjusted)), "")
+    signature_rows <- dplyr::bind_rows(
+      tidy_cox_summary(result$results_signature$unadjusted, "Grouped, unadjusted", split_method),
+      tidy_cox_summary(result$results_signature$adjusted, "Grouped, adjusted", split_method)
+    )
+    if (nrow(signature_rows)) {
+      lines <- c(
+        lines,
+        "## Signature Cox Model Terms",
+        "",
+        "The adjusted model includes the signature comparison and every retained covariate.",
+        "",
+        markdown_table_lines(signature_rows),
+        ""
+      )
     }
   }
 
@@ -323,6 +409,7 @@ opt$signature_continuous_cohort <- cli_parse_enum_flag(
   flag_name = "signature_continuous_cohort",
   normalize = "lower"
 )
+opt$gene_resolution <- normalize_gene_resolution_mode(opt$gene_resolution)
 feature_list <- cli_parse_csv_list(opt$features)
 endpoint_list <- cli_parse_csv_list(opt$endpoints, uppercase = TRUE)
 signature_genes <- cli_parse_csv_list(opt$signature_genes)
@@ -363,6 +450,18 @@ cli_assert_existing_input_files(
 
 expression_data <- read_expression_table(opt$expr_file, opt$gene_column)
 metadata <- read_metadata_table(opt$meta_file)
+
+gene_resolution_table <- resolve_requested_gene_identifiers(
+  requested_genes = analysis_genes,
+  expression_gene_ids = expression_data[[opt$gene_column]],
+  mode = opt$gene_resolution
+)
+assert_gene_resolution_is_unambiguous(gene_resolution_table)
+analysis_genes <- replace_requested_gene_identifiers(analysis_genes, gene_resolution_table)
+individual_features <- replace_requested_gene_identifiers(individual_features, gene_resolution_table)
+if (has_signature) {
+  signature_genes <- replace_requested_gene_identifiers(signature_genes, gene_resolution_table)
+}
 
 if (!opt$sample_column %in% names(metadata)) stop("Metadata missing sample column: ", opt$sample_column)
 
@@ -417,6 +516,7 @@ if (!nrow(metadata_filtered)) {
 
 dir.create(opt$output_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(opt$output_dir, "logs"), recursive = TRUE, showWarnings = FALSE)
+write_gene_resolution_report(gene_resolution_table, opt$output_dir)
 
 covariates_requested <- covariate_request$columns
 covariates <- covariates_requested[covariates_requested %in% names(metadata_filtered)]
@@ -468,18 +568,23 @@ for (endpoint_name in endpoint_list) {
     include_groups = include_groups,
     steps_to_run = steps_to_run,
     run_lasso = is_truthy(opt$run_lasso),
-    run_ph_checks = TRUE,
-    run_time_dependent = TRUE,
+    run_ph_checks = is_truthy(opt$run_ph_checks),
+    run_time_dependent = is_truthy(opt$run_time_dependent),
     cut_months = opt$cut_months,
     save_plots = is_truthy(opt$save_plots),
     export_csv = is_truthy(opt$export_csv),
     output_dir = endpoint_dir,
-    plot_params = list(plot_title = paste0(endpoint_name, " Single-Cohort Survival")),
+    plot_params = list(
+      plot_title = paste0(endpoint_name, " Single-Cohort Survival"),
+      signature_label = opt$signature_label
+    ),
     verbose = is_truthy(opt$verbose)
   )
 
-  saveRDS(result, file = file.path(endpoint_dir, paste0(endpoint_name, "_results.rds")))
-  build_endpoint_summary(endpoint_name, endpoint_dir, result, feature_list, opt$adjust_covariates)
+  if (is_truthy(opt$save_results_rds)) {
+    saveRDS(result, file = file.path(endpoint_dir, paste0(endpoint_name, "_results.rds")))
+  }
+  build_endpoint_summary(endpoint_name, endpoint_dir, result, feature_list, opt$adjust_covariates, opt$split_method)
   write_grouped_gene_results(endpoint_name, endpoint_dir, result)
   write_adjusted_model_full_coefficients(endpoint_name, endpoint_dir, result)
 
@@ -505,6 +610,8 @@ write_run_metadata_guardrail(
   parameters = list(
     sample_column = opt$sample_column,
     gene_column = opt$gene_column,
+    gene_resolution = opt$gene_resolution,
+    gene_resolution_report = file.path("tables", "gene_identifier_resolution.csv"),
     group_column = if (!is.null(effective_group_column)) effective_group_column else opt$group_column,
     group_filter = if (length(effective_group_values)) paste(effective_group_values, collapse = ",") else opt$group_filter,
     group_type = effective_group_type,
@@ -513,6 +620,7 @@ write_run_metadata_guardrail(
     age_column = opt$age_column,
     race_column = opt$race_column,
     signature_genes = paste(signature_genes, collapse = ","),
+    signature_label = opt$signature_label,
     features = opt$features,
     endpoints = opt$endpoints,
     analysis_genes = paste(analysis_genes, collapse = ","),
@@ -530,6 +638,9 @@ write_run_metadata_guardrail(
     steps_to_run = paste(steps_to_run, collapse = ","),
     cut_months = opt$cut_months,
     run_km_individual = opt$run_km_individual,
+    run_ph_checks = opt$run_ph_checks,
+    run_time_dependent = opt$run_time_dependent,
+    save_results_rds = opt$save_results_rds,
     save_plots = opt$save_plots,
     export_csv = opt$export_csv,
     run_lasso = opt$run_lasso
