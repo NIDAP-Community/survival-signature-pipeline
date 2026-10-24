@@ -125,6 +125,12 @@ is_legacy_output_root <- function(path) {
 }
 
 get_git_sha <- function() {
+  # OCI images deliberately omit .git. The Dockerfile carries the revision
+  # supplied at build time into this environment variable so run metadata
+  # remains traceable to its source commit when git is unavailable.
+  image_revision <- trimws(Sys.getenv("SURVIVAL_IMAGE_REVISION", unset = ""))
+  if (nzchar(image_revision)) return(image_revision)
+
   sha <- tryCatch(system2("git", c("rev-parse", "HEAD"), stdout = TRUE, stderr = FALSE), error = function(e) "")
   if (!length(sha)) return("NA")
   out <- trimws(sha[[1]])

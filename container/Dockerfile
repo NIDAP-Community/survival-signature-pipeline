@@ -85,7 +85,8 @@ RUN chmod 0755 /usr/local/bin/survival-pipeline \
 # explicitly resolves the restored renv library and passes it to every child
 # Rscript process launched by entrypoint.R.
 ENV RENV_CONFIG_AUTOLOADER_ENABLED=FALSE \
-    R_PROFILE_USER=/dev/null
+    R_PROFILE_USER=/dev/null \
+    SURVIVAL_IMAGE_REVISION=${VCS_REF}
 
 USER survival
 ENTRYPOINT ["/usr/local/bin/survival-pipeline"]
