@@ -14,7 +14,7 @@
 
 - The final METABRIC example was generated locally from prepared public-cohort files and validates the reporting presentation, not clinical utility.
 - OS and PFI proportional-hazards diagnostics flagged violations in that demonstration; users should inspect the generated time-dependent outputs rather than interpret a static grouped contrast alone.
-- Container helpers and CI coverage exist. A fresh local Docker smoke test remains pending available Docker disk resources; do not delete Docker state or treat a local image test as AWS deployment evidence.
+- Reclaimed unused local Docker build cache, then built the native image and passed the canonical container smoke test. The test verified the `/data` to `/output` contract and required output artifacts; it does not establish an AWS deployment, release, or clinical validation.
 
 ## Summary
 

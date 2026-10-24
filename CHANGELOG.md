@@ -1,3 +1,11 @@
+# 2026-10-24
+
+- repaired portable container builds behind an HTTPS-inspecting network by accepting an optional BuildKit CA secret without embedding institutional trust material in the image or repository
+- added missing explicit Linux build dependencies and retained the renv package cache across interrupted local builds
+- restored the locked R environment into a self-contained project library rather than creating links to an ephemeral build cache
+- made the Docker runtime helpers portable to macOS and Linux, and prevented noninteractive survival plots from opening implicit `Rplots.pdf` devices
+- built the native image and passed the canonical container smoke test; expected tiny-fixture Cox convergence and upstream ggpubr deprecation warnings remain non-fatal
+
 # 2026-10-23
 
 - changed maintained single-cohort defaults to low/mid/high tertiles for Kaplan-Meier displays and all eligible samples for continuous signature Cox models

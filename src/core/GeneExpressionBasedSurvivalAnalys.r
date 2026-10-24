@@ -1388,7 +1388,11 @@ analyze_survival_expression <- function(
       results$plots$signature <- p
       
       if (verbose) {
-        print(p)
+        # ggsurvplot opens an implicit Rplots.pdf device when printed from a
+        # noninteractive Rscript session. Explicit PNG export below is the
+        # batch/container artifact, while console rendering remains useful in
+        # an interactive R session.
+        if (interactive()) print(p)
         cat("\nCox Proportional Hazards (signature):\n")
         print(summary(cox_unadj))
         if (!is.null(cox_adj)) {
@@ -1510,7 +1514,7 @@ analyze_survival_expression <- function(
             )
             
             results$plots$signature_early <- p_early
-            if (verbose) print(p_early)
+            if (verbose && interactive()) print(p_early)
             
             # Store early window Cox results
             results$results_signature_early <- list(
@@ -1585,7 +1589,7 @@ analyze_survival_expression <- function(
             )
             
             results$plots$signature_late <- p_late
-            if (verbose) print(p_late)
+            if (verbose && interactive()) print(p_late)
             
             # Store late window Cox results
             results$results_signature_late <- list(
@@ -1975,7 +1979,7 @@ analyze_survival_expression <- function(
       }
       
       results$plots[[g]] <- p
-      if (verbose) print(p)
+      if (verbose && interactive()) print(p)
       
       if (save_plots) {
         ggplot2::ggsave(

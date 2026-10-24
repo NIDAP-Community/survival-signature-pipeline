@@ -29,6 +29,20 @@ Build natively for the local Docker host:
 container/build_docker.sh survival-signature-pipeline:local
 ```
 
+If a local institutional network transparently inspects HTTPS, retain
+certificate verification by providing its PEM trust bundle only for dependency
+retrieval. The helper passes this file as a BuildKit secret; it is not copied
+into the image or repository:
+
+```bash
+DOCKER_CA_CERT=/path/to/trusted-network-root.pem \
+  container/build_docker.sh survival-signature-pipeline:local
+```
+
+Do not disable TLS verification or add an institution-specific certificate to
+the Dockerfile. This setting is unnecessary for standard internet-connected
+or AWS builds.
+
 For a target platform, make the architecture explicit:
 
 ```bash

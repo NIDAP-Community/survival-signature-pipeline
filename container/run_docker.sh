@@ -26,7 +26,9 @@ if [[ ! -d "${data_dir}" ]]; then
   exit 2
 fi
 
-mkdir --parents "${output_dir}"
+# -p is supported by both macOS and Linux; GNU's long --parents option is not
+# available in the macOS host shell that invokes this helper.
+mkdir -p "${output_dir}"
 data_dir="$(CDPATH= cd -- "${data_dir}" && pwd -P)"
 output_dir="$(CDPATH= cd -- "${output_dir}" && pwd -P)"
 

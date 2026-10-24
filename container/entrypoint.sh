@@ -6,7 +6,7 @@
 set -euo pipefail
 
 project_dir="/app"
-renv_package_dir="$(find "${project_dir}/renv/library" -maxdepth 4 -type d -name renv -print -quit 2>/dev/null || true)"
+renv_package_dir="$(find "${project_dir}/renv/library" -maxdepth 6 -type d -name renv -print -quit 2>/dev/null || true)"
 
 if [[ -z "${renv_package_dir}" ]]; then
   printf '%s\n' "Project renv library is missing from the container image." >&2
