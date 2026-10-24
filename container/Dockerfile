@@ -22,6 +22,7 @@ RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
         ca-certificates \
         cmake \
+        curl \
         g++ \
         gfortran \
         libcurl4-openssl-dev \
