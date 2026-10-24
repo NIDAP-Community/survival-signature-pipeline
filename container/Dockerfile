@@ -4,7 +4,8 @@
 # intentionally independent of any AWS, database, or OncoChat credentials:
 # callers mount analysis inputs at /data and receive run artifacts at /output.
 
-ARG R_VERSION=4.5.1
+# Keep the runtime aligned with the reference multi-gene-correlations image.
+ARG R_VERSION=4.5.2
 FROM rocker/r-ver:${R_VERSION}
 
 # l2psupp supplies updategenes() for auditable normalization of user-entered
