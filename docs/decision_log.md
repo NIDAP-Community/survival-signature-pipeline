@@ -1,5 +1,15 @@
 # Decision Log
 
+## 2026-10-24: Distribute the validated OCI image by immutable GHCR digest
+
+The reusable survival-analysis runtime is published as a linux/amd64 OCI image
+in GitHub Container Registry. Deployment callers must pin the image digest and
+retain it with each run's provenance; a source-revision tag is discovery
+metadata, not a deployment identity. The repository's CI remains a
+credential-free build-and-smoke-test workflow, while publication is a separate
+authorized release action. A formal semantic-version Git tag and GitHub
+Release remain deferred until explicitly created.
+
 ## 2026-10-22: Use a Declarative Plan for Generic Single-Cohort Effect and Interaction Models
 
 Decision:

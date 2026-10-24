@@ -6,6 +6,8 @@
 - made the Docker runtime helpers portable to macOS and Linux, and prevented noninteractive survival plots from opening implicit `Rplots.pdf` devices
 - built the native image and passed the canonical container smoke test; expected tiny-fixture Cox convergence and upstream ggpubr deprecation warnings remain non-fatal
 - aligned the container architecture and CI scope with multi-gene-correlation: linux/amd64 build and smoke validation only
+- published the validated linux/amd64 OCI image to GHCR by immutable digest; the CI workflow remains validation-only and does not hold registry publication credentials
+- added a generic Apptainer/Singularity runtime wrapper that preserves the documented `/data` read-only and `/output` writable mount contract
 
 # 2026-10-23
 

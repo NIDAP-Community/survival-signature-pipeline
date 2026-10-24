@@ -1,5 +1,25 @@
 # Session Notes
 
+## 2026-10-24 Container Distribution and Documentation Standardization
+
+- Completed local and hosted linux/amd64 container validation, including the
+  canonical smoke test and a full METABRIC OS/PFI run whose numerical summaries
+  matched the preceding validated image run.
+- Published the validated OCI image to GHCR by immutable digest. The image
+  embeds source revision `99cbdf1cfdcdb4ecf9c0ed5cbe4ac6ab996f7092`; the
+  digest is the deployment identity recorded in the README and container
+  documentation.
+- Added the missing container-facing README and a formal-release documentation
+  convention to align repository navigation with multi-gene-correlations while
+  retaining the survival repository's stronger AWS adapter contract and CI
+  validation.
+- Added a generic Apptainer/Singularity runtime wrapper so converted OCI images
+  use the same read-only `/data` and writable `/output` interface as Docker.
+- Corrects earlier historical notes: the maintained container is no longer a
+  placeholder, uses the R 4.5.2 base image, targets linux/amd64 only, and the
+  published image is separate from the credential-free validation workflow.
+- A semantic-version Git tag and GitHub Release remain deliberately deferred.
+
 ## 2026-10-23 Checkpoint: Finalized Default Presentation and Reporting
 
 - Set the maintained single-cohort default to tertile low/mid/high Kaplan-Meier displays and to `signature_continuous_cohort = all`, so the primary continuous signature Cox estimate retains every eligible sample even when an extreme-group display is selected.

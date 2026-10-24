@@ -35,7 +35,7 @@ List every maintained workflow and its short description:
 
 ### Container setup
 
-The same maintained CLI is available as a portable OCI image. Build the image, then run the containerized smoke test:
+The same maintained CLI is available as a portable OCI image. Build the image locally, then run the containerized smoke test:
 
 ```bash
 container/build_docker.sh survival-signature-pipeline:local
@@ -44,7 +44,51 @@ container/smoke_test.sh survival-signature-pipeline:local
 
 The image is built for `linux/amd64`, matching the multi-gene-correlation container standard. It reads caller-provided files from `/data` and writes run artifacts to `/output`; see [the container contract](docs/container_contract.md) for a Docker invocation and integration boundary.
 
-The repository's container-validation workflow runs an amd64 image smoke test on pull requests and pushes to `main`; it does not publish an image. A calling application should follow the [AWS adapter contract](docs/aws_adapter_contract.md) for validated request handling, data staging, and artifact collection.
+### Published image
+
+The validated image is published to GitHub Container Registry (GHCR). For a
+reproducible run, pull and launch it by immutable digest rather than by a
+mutable tag:
+
+```bash
+docker pull ghcr.io/nidap-community/survival-signature-pipeline@sha256:a25e77f298eb602bf0a5e088a295cce783dd987baf23b7dada4d1cafea9ed35f
+```
+
+The corresponding source-revision tag is
+`99cbdf1cfdcdb4ecf9c0ed5cbe4ac6ab996f7092`; it is provided for discovery,
+while the digest above is the deployment identity. A Docker invocation should
+bind caller-controlled inputs read-only at `/data` and a fresh output directory
+at `/output`. The repository helper enforces that layout:
+
+```bash
+container/run_docker.sh \
+  ghcr.io/nidap-community/survival-signature-pipeline@sha256:a25e77f298eb602bf0a5e088a295cce783dd987baf23b7dada4d1cafea9ed35f \
+  /path/to/input_directory \
+  /path/to/output_directory \
+  single-cohort-survival \
+  --expr-file /data/expression.tsv \
+  --meta-file /data/metadata.csv \
+  --features Signature \
+  --signature-genes GENE1,GENE2 \
+  --output-dir /output
+```
+
+HPC users may convert the same OCI image with Apptainer or Singularity. Test
+the converted image in the target environment before using it for a production
+job:
+
+```bash
+apptainer pull survival-signature-pipeline.sif \
+  docker://ghcr.io/nidap-community/survival-signature-pipeline@sha256:a25e77f298eb602bf0a5e088a295cce783dd987baf23b7dada4d1cafea9ed35f
+```
+
+See [container/README.md](container/README.md) for the distribution model and
+[the container contract](docs/container_contract.md) for the full runtime
+interface. The repository's container-validation workflow runs an amd64 image
+smoke test on pull requests and pushes to `main`; it validates but does not
+publish images. A calling application should follow the [AWS adapter
+contract](docs/aws_adapter_contract.md) for validated request handling, data
+staging, and artifact collection.
 
 ## Example Output
 
@@ -326,6 +370,17 @@ The small files in `test_data/` are interface smoke-test fixtures only; they are
 - R 4.5.1 or a compatible R release
 - The project library restored from `renv.lock`
 - Tab-separated expression matrices and CSV metadata tables as described above
+
+## Distribution and versioning
+
+Use the published OCI digest for a reproducible deployment and retain it with
+the run's `RUN_METADATA.md`. A formal semantic-version Git tag and GitHub
+Release are intentionally deferred; when one is created, its notes and
+versioned image reference will be recorded under [docs/releases/](docs/releases/).
+
+## License
+
+This project is available under the [MIT License](LICENSE).
 
 ## Support
 

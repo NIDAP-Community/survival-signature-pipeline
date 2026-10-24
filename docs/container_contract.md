@@ -77,6 +77,26 @@ container/run_docker.sh \
   --output-dir /output
 ```
 
+## Apptainer or Singularity Invocation
+
+Convert the published OCI image to a `.sif` in the target HPC environment, or
+transfer a separately verified `.sif` through an approved distribution path.
+Then use the companion runtime helper, which applies the same mount contract:
+
+```bash
+container/run_apptainer.sh survival-signature-pipeline.sif \
+  /path/to/input_directory \
+  /path/to/output_directory \
+  single-cohort-survival \
+  --expr-file /data/expression.tsv \
+  --meta-file /data/metadata.csv \
+  --output-dir /output
+```
+
+The helper selects `apptainer` or legacy `singularity` from `PATH`. Validate
+the converted artifact with a target-environment smoke test before relying on
+it for a production analysis.
+
 ## Integration Boundary
 
 An AWS integration may stage approved inputs to `/data` and collect `/output` artifacts, but it must remain outside this repository. A caller integrating with a database or an agent runtime is responsible for request validation, data materialization, storage access, IAM, job lifecycle, artifact delivery, and its own infrastructure as code.
@@ -89,4 +109,4 @@ collection, and acceptance checks, see the
 
 ## Continuous Validation
 
-`.github/workflows/container.yml` builds and smoke-tests the linux/amd64 image on pull requests and pushes to `main`. It deliberately has no registry credentials and does not publish an image. Image publication, registry retention, signing, vulnerability policy, and AWS deployment remain release/integration responsibilities.
+`.github/workflows/container.yml` builds and smoke-tests the linux/amd64 image on pull requests and pushes to `main`. It deliberately has no registry credentials and does not publish an image. The validated GHCR image and its immutable digest are listed in the top-level README; image publication, registry retention, signing, vulnerability policy, and AWS deployment remain deliberate release/integration responsibilities.
