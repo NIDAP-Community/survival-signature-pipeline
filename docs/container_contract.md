@@ -43,11 +43,11 @@ Do not disable TLS verification or add an institution-specific certificate to
 the Dockerfile. This setting is unnecessary for standard internet-connected
 or AWS builds.
 
-For a target platform, make the architecture explicit:
+The container follows the same single-architecture convention as
+multi-gene-correlation: `linux/amd64`.
 
 ```bash
-TARGET_PLATFORM=linux/arm64 container/build_docker.sh survival-signature-pipeline:arm64
-TARGET_PLATFORM=linux/amd64 container/build_docker.sh survival-signature-pipeline:amd64
+container/build_docker.sh survival-signature-pipeline:local
 ```
 
 `container/build_docker.sh` is intentionally a local-build helper and loads a
@@ -55,7 +55,7 @@ single-platform image into the local Docker image store. A release workflow
 should build and push a separately validated image by immutable digest; it
 should not rely on this local tag as release evidence.
 
-Run the image's canonical smoke test after each target-platform build:
+Run the image's canonical smoke test after each build:
 
 ```bash
 container/smoke_test.sh survival-signature-pipeline:local
@@ -89,4 +89,4 @@ collection, and acceptance checks, see the
 
 ## Continuous Validation
 
-`.github/workflows/container.yml` builds and smoke-tests the native Linux image and separately builds the ARM64 image on pull requests and pushes to `main`. It deliberately has no registry credentials and does not publish an image. Image publication, registry retention, signing, vulnerability policy, and AWS deployment remain release/integration responsibilities.
+`.github/workflows/container.yml` builds and smoke-tests the linux/amd64 image on pull requests and pushes to `main`. It deliberately has no registry credentials and does not publish an image. Image publication, registry retention, signing, vulnerability policy, and AWS deployment remain release/integration responsibilities.

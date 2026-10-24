@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Build a locally tagged OCI image. Set TARGET_PLATFORM explicitly for a
-# deployable architecture, for example linux/arm64 for the current AgentCore
-# path or linux/amd64 for an x86_64 Fargate task.
+# Build a locally tagged linux/amd64 OCI image, matching the published
+# multi-gene-correlation container standard.
 
 set -euo pipefail
 
@@ -15,14 +14,11 @@ build_args=(
   --file "${project_dir}/container/Dockerfile"
   --progress "${DOCKER_BUILD_PROGRESS:-auto}"
   --load
+  --platform linux/amd64
   --tag "${image_tag}"
   --build-arg "VCS_REF=${vcs_ref}"
   --build-arg "BUILD_DATE=${build_date}"
 )
-
-if [[ -n "${TARGET_PLATFORM:-}" ]]; then
-  build_args+=(--platform "${TARGET_PLATFORM}")
-fi
 
 # On a network that inspects HTTPS, provide its PEM trust bundle without
 # embedding it in the build context or final image. The Dockerfile consumes it

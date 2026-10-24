@@ -5,6 +5,7 @@
 - restored the locked R environment into a self-contained project library rather than creating links to an ephemeral build cache
 - made the Docker runtime helpers portable to macOS and Linux, and prevented noninteractive survival plots from opening implicit `Rplots.pdf` devices
 - built the native image and passed the canonical container smoke test; expected tiny-fixture Cox convergence and upstream ggpubr deprecation warnings remain non-fatal
+- aligned the container architecture and CI scope with multi-gene-correlation: linux/amd64 build and smoke validation only
 
 # 2026-10-23
 

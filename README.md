@@ -42,9 +42,9 @@ container/build_docker.sh survival-signature-pipeline:local
 container/smoke_test.sh survival-signature-pipeline:local
 ```
 
-Use `TARGET_PLATFORM=linux/arm64` or `TARGET_PLATFORM=linux/amd64` when building for a specific deployment target. The image reads caller-provided files from `/data` and writes run artifacts to `/output`; see [the container contract](docs/container_contract.md) for a Docker invocation and integration boundary.
+The image is built for `linux/amd64`, matching the multi-gene-correlation container standard. It reads caller-provided files from `/data` and writes run artifacts to `/output`; see [the container contract](docs/container_contract.md) for a Docker invocation and integration boundary.
 
-The repository's container-validation workflow runs a native image smoke test and builds the ARM64 target on pull requests and pushes to `main`; it does not publish an image. A calling application should follow the [AWS adapter contract](docs/aws_adapter_contract.md) for validated request handling, data staging, and artifact collection.
+The repository's container-validation workflow runs an amd64 image smoke test on pull requests and pushes to `main`; it does not publish an image. A calling application should follow the [AWS adapter contract](docs/aws_adapter_contract.md) for validated request handling, data staging, and artifact collection.
 
 ## Example Output
 
