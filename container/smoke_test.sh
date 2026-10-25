@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Run the maintained expression and binary-biomarker fixtures inside an already
-# built image and assert the minimal portable artifact contract. The temporary
-# output directory is retained after completion so failures and generated files
-# are inspectable.
+# Run the maintained expression, binary-biomarker, and continuous-biomarker
+# fixtures inside an already built image and assert the minimal portable
+# artifact contract. The temporary output directory is retained after
+# completion so failures and generated files are inspectable.
 
 set -euo pipefail
 
@@ -12,6 +12,7 @@ image_tag="${1:-survival-signature-pipeline:local}"
 smoke_root="$(mktemp -d "${TMPDIR:-/tmp}/survival-container-smoke.XXXXXX")"
 expression_output_dir="${smoke_root}/expression_output"
 binary_output_dir="${smoke_root}/binary_output"
+continuous_output_dir="${smoke_root}/continuous_output"
 
 "${script_dir}/run_docker.sh" \
   "${image_tag}" \
@@ -21,6 +22,18 @@ binary_output_dir="${smoke_root}/binary_output"
   --expr-file /data/tcga_expression.tsv \
   --meta-file /data/tcga_metadata_no_subtype.csv \
   --features GENE_D \
+  --endpoints OS \
+  --adjust-covariates none \
+  --output-dir /output
+
+"${script_dir}/run_docker.sh" \
+  "${image_tag}" \
+  "${project_dir}/test_data" \
+  "${continuous_output_dir}" \
+  single-cohort-continuous-biomarker-survival \
+  --biomarker-file /data/continuous_biomarker_matrix.tsv \
+  --meta-file /data/tcga_metadata_no_subtype.csv \
+  --features MYC_log2_copy_number \
   --endpoints OS \
   --adjust-covariates none \
   --output-dir /output
@@ -53,6 +66,14 @@ required_files=(
   "${binary_output_dir}/OS/grouped_biomarker_cox_results.csv"
   "${binary_output_dir}/OS/OS_results.rds"
   "${binary_output_dir}/OS/KM_TP53_mutated.png"
+  "${continuous_output_dir}/RUN_METADATA.md"
+  "${continuous_output_dir}/logs/sessionInfo.txt"
+  "${continuous_output_dir}/continuous_biomarker_definition.csv"
+  "${continuous_output_dir}/run_manifest.csv"
+  "${continuous_output_dir}/OS/results_univariate.csv"
+  "${continuous_output_dir}/OS/grouped_biomarker_cox_results.csv"
+  "${continuous_output_dir}/OS/OS_results.rds"
+  "${continuous_output_dir}/OS/KM_MYC_log2_copy_number.png"
 )
 
 for required_file in "${required_files[@]}"; do

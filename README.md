@@ -222,6 +222,17 @@ TP53_mutated  1         0         1
 
 Feature identifiers are arbitrary labels in this workflow, so it can represent a gene-level mutation, a copy-number event after binary calling, or another already-defined binary molecular state. The matrix and metadata must use the same subject identifiers.
 
+### Continuous biomarker matrix
+
+Use `single-cohort-continuous-biomarker-survival` for a precomputed, feature-by-subject numeric table, initially for copy-number values such as log2 ratios. Missing values are permitted; every non-missing value must be finite and each requested feature must vary in the supplied cohort. The workflow reports continuous Cox effects per within-cohort standard deviation and uses the selected tertile, quartile, or median split only for the KM display.
+
+```text
+Feature                  Sample_1  Sample_2  Sample_3
+MYC_log2_copy_number     0.42      -0.11     0.67
+```
+
+It does not normalize copy number or turn a numeric value into a deletion/amplification call. Those choices belong to the upstream data-preparation contract.
+
 ### Gene identifiers
 
 The maintained gene-consuming workflows can normalize user-supplied human gene symbols with the pinned `l2psupp::updategenes()` resolver (`--gene-resolution l2p`). This opt-in behavior leaves existing calls unchanged. The expression matrix is never renamed or rewritten. An exact input row is preferred; otherwise, an updated symbol is used only when it matches an existing expression row (in both matrices for a two-cohort workflow). Every run writes `tables/gene_identifier_resolution.csv`, preserving the submitted name, L2P result, package version, matched expression row, and any unresolved gene.
@@ -234,6 +245,7 @@ The maintained gene-consuming workflows can normalize user-supplied human gene s
 | --- | --- |
 | `single-cohort-survival` | You need grouped and continuous gene/signature survival analysis, Kaplan-Meier plots, and per-endpoint outputs for one cohort. |
 | `single-cohort-binary-biomarker-survival` | You have a prepared 0/1 molecular-feature matrix, such as mutation status, and need mutated/positive versus wild-type/negative KM and Cox results. |
+| `single-cohort-continuous-biomarker-survival` | You have a prepared numeric molecular-feature matrix, such as copy-number log2 ratios, and need standardized continuous Cox effects plus grouped KM displays. |
 | `single-cohort-analysis-plan` | You need a reproducible collection of adjusted overall effects, filtered subgroup effects, or formal feature-by-group interaction tests for one prepared cohort. |
 | `subgroup-forest-bundle` | You already have a shared subgroup-effect summary table and need a forest plot. |
 | `piecewise-dataset-interaction` | You have two harmonized, independent comparable cohorts and need pooled piecewise models with dataset interactions. |
@@ -327,6 +339,23 @@ This workflow keeps molecular calling upstream and models the submitted binary v
 ```
 
 For each endpoint, the run writes the KM plot, `grouped_biomarker_cox_results.csv`, an endpoint summary, result object, and the same run-level provenance files used by the expression workflow. The KM plot and log-rank test are unadjusted; grouped Cox rows provide the `1` versus `0` hazard ratio and, when requested, its covariate-adjusted estimate. The binary workflow accepts only `0`, `1`, or missing values and does not run L2P because its feature labels need not be gene symbols.
+
+## Run a Continuous Molecular-Biomarker Analysis
+
+This workflow accepts prepared numeric data without treating values as expression. For example, a log2 copy-number feature can be analyzed as follows:
+
+```bash
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-continuous-biomarker-survival \
+  --biomarker-file test_data/continuous_biomarker_matrix.tsv \
+  --meta-file test_data/tcga_metadata_no_subtype.csv \
+  --features MYC_log2_copy_number \
+  --split-method tertiles \
+  --endpoints OS,PFI \
+  --adjust-covariates none \
+  --output-dir results/continuous_biomarker_smoke
+```
+
+The primary continuous Cox result is per one standard deviation of the submitted feature among eligible cohort members. The selected split affects only grouped KM and grouped Cox results. Use a separately documented binary matrix when a study-specific amplification/deletion threshold is scientifically required.
 
 ## Run a Declarative Analysis Plan
 

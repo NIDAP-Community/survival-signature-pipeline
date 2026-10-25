@@ -1906,7 +1906,7 @@ analyze_survival_expression <- function(
       )
       gene_params <- plot_params
       gene_params$stats_panel_mode <- "bottom_table"
-      # Continuous univariate and adjusted Cox (per-unit expression) for display
+      # Continuous univariate and adjusted Cox (per feature unit) for display.
       cont_unadj_fit <- try(survival::coxph(survival::Surv(time, event) ~ expr_g, data = surv_gene), silent = TRUE)
       cont_unadj_sum <- if (!inherits(cont_unadj_fit, "try-error")) summary(cont_unadj_fit) else NULL
       cont_adj_sum <- NULL
@@ -2087,9 +2087,9 @@ analyze_survival_expression <- function(
       results$results_grouped_gene <- dplyr::bind_rows(grouped_gene_rows)
     }
 
-    # Optional: per-gene early/late window KM analyses (similar to signature time-dependent windows)
+    # Optional: per-feature early/late window KM analyses (similar to signature time-dependent windows).
     if (gene_early_late && run_time_dependent) {
-      if (verbose) cat("Generating per-gene early/late KM plots...\n")
+      if (verbose) cat("Generating per-feature early/late KM plots...\n")
       for (g in genes_to_plot) {
         # Build survival frame with expression for gene g
         if (!(g %in% rownames(gene_mat))) next
@@ -2209,7 +2209,7 @@ analyze_survival_expression <- function(
       # After generating individual early/late plots, build combined panels
       if (combine_gene_plots) {
         if (!requireNamespace("cowplot", quietly = TRUE) && !requireNamespace("patchwork", quietly = TRUE) && !requireNamespace("gridExtra", quietly = TRUE)) {
-          if (verbose) warning("No layout package for combined early/late gene panels.")
+          if (verbose) warning("No layout package for combined early/late feature panels.")
         } else {
           # Helper to assemble combined early or late plots
           assemble_window <- function(suffix, tag) {
@@ -2393,14 +2393,14 @@ analyze_survival_expression <- function(
     
     if (!is.null(results$results_adjusted)) {
       sig_genes <- results$results_adjusted$Gene[results$results_adjusted$FDR < fdr_threshold]
-      cat(sprintf("Significant genes (FDR < %.2f): %d\n", fdr_threshold, length(sig_genes)))
+      cat(sprintf("Significant features (FDR < %.2f): %d\n", fdr_threshold, length(sig_genes)))
       if (length(sig_genes) > 0) {
-        cat("Genes:", paste(sig_genes, collapse = ", "), "\n")
+        cat("Features:", paste(sig_genes, collapse = ", "), "\n")
       }
     }
     
     if (!is.null(results$lasso_selected) && length(results$lasso_selected) > 0) {
-      cat(sprintf("LASSO selected: %d genes\n", length(results$lasso_selected)))
+      cat(sprintf("LASSO selected: %d features\n", length(results$lasso_selected)))
     }
     
     cat(sprintf("Total samples analyzed: %d\n", nrow(merged_base)))

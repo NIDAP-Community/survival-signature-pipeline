@@ -40,6 +40,7 @@ This command exercises a real maintained workflow through entrypoint.R while als
 
 - tcga_expression.tsv
 - binary_biomarker_matrix.tsv
+- continuous_biomarker_matrix.tsv
 - tcga_metadata.csv
 - tcga_metadata_no_subtype.csv
 - metabric_expression.tsv
@@ -63,6 +64,22 @@ it is not a scientifically interpretable mutation dataset.
   --endpoints OS \
   --adjust-covariates none \
   --output-dir results/binary_biomarker_smoke
+```
+
+## Continuous Biomarker Smoke Test
+
+The continuous-biomarker fixture is a synthetic numeric matrix for interface
+validation of copy-number-like features. It is not a scientifically
+interpretable copy-number dataset.
+
+```bash
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-continuous-biomarker-survival \
+  --biomarker-file test_data/continuous_biomarker_matrix.tsv \
+  --meta-file test_data/tcga_metadata_no_subtype.csv \
+  --features MYC_log2_copy_number \
+  --endpoints OS \
+  --adjust-covariates none \
+  --output-dir results/continuous_biomarker_smoke
 ```
 
 ## Example Commands

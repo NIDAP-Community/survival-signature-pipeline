@@ -1,5 +1,8 @@
 # 2026-10-25
 
+- added a maintained continuous molecular-biomarker workflow for prepared numeric feature matrices, initially covering copy-number-like values without imposing a calling threshold
+- defined continuous Cox estimates as per within-cohort standard deviation and kept tertile/quartile/median splits limited to grouped KM and grouped Cox displays
+- added numeric validation, a synthetic continuous fixture, portable container smoke coverage, and OncoChat staging guidance that leaves normalization and amplification/deletion calls upstream
 - added a maintained binary molecular-biomarker workflow for prepared 0/1 feature matrices, beginning with mutation-status use cases while leaving expression/signature inputs unchanged
 - added strict binary-value, feature, subject, and metadata validation; named 0/1 labels; KM plots; grouped and covariate-adjusted Cox exports; provenance; and a synthetic smoke fixture
 - documented the portable and AWS-adapter boundary: the calling application stages approved binary calls and clinical metadata, while the container neither queries PostgreSQL nor derives mutation calls

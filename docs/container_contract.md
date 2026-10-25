@@ -61,7 +61,7 @@ Run the image's canonical smoke test after each build:
 container/smoke_test.sh survival-signature-pipeline:local
 ```
 
-The smoke test retains its output directory and verifies that the container creates run metadata, session information, result tables/RDS, and a Kaplan-Meier PNG for both the maintained expression and binary-biomarker workflows.
+The smoke test retains its output directory and verifies that the container creates run metadata, session information, result tables/RDS, and a Kaplan-Meier PNG for the maintained expression, binary-biomarker, and continuous-biomarker workflows.
 
 ## Docker Invocation
 

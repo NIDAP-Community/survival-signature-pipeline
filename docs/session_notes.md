@@ -1,5 +1,17 @@
 # Session Notes
 
+## 2026-10-25 Continuous Molecular-Biomarker Survival Workflow
+
+- Added `single-cohort-continuous-biomarker-survival` as a maintained separate
+  CLI surface for prepared patient-level numeric matrices, with copy-number
+  log2 ratios as the initial use case.
+- Continuous Cox estimates use a one-standard-deviation unit within the
+  eligible cohort. Tertile, quartile, and median groupings are available only
+  for the descriptive KM and grouped-Cox views.
+- The upstream adapter remains responsible for numeric preparation and any
+  scientifically defined deletion/amplification calls; the container does not
+  infer them.
+
 ## 2026-10-25 Binary Molecular-Biomarker Survival Workflow
 
 - Added `single-cohort-binary-biomarker-survival` as a maintained, separate
