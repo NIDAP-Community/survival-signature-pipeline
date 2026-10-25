@@ -27,7 +27,7 @@ The repository currently has one strong reusable core, a small but real utility 
 - src/utilities/reporting_helpers.R contains shared reporting-side subgroup heatmap preparation, shared reporting output scaffolding, shared reporting table-formatting helpers, and minimal common plotting defaults.
 - src/utilities/cli_helpers.R contains the small shared maintained-driver CLI and pre-load utility layer.
 - drivers/ contains the maintained pooled and piecewise workflows.
-- drivers/ now also contains a maintained single-cohort analysis workflow that runs through the reusable core.
+- drivers/ now also contains maintained single-cohort expression/signature and binary-biomarker survival workflows that run through the reusable core.
 - drivers/ contains a maintained declarative single-cohort analysis-plan workflow for generic adjusted, subgroup, and interaction Cox models.
 - drivers/ also contains maintained downstream reporting workflows for single-cohort and pooled reporting bundles.
 - src/drivers/ contains older HTML-oriented and report-oriented wrappers that still depend on the reusable core.
@@ -94,7 +94,7 @@ In the first wave, these drivers still retain some historical two-dataset naming
 The maintained driver layer now has two categories:
 
 - pooled two-dataset workflows for independent or comparable cohort comparisons
-- a single-cohort workflow for one dataset at a time, using the reusable core directly
+- single-cohort expression/signature and binary-biomarker workflows for one prepared dataset at a time, using the reusable core directly
 - a declarative single-cohort analysis-plan workflow for a prepared cohort with explicit covariates, filters, subgroup effects, and interaction tests
 
 Biologically distinct disease-state comparisons, such as GBM versus LGG, should not be forced into the pooled two-dataset workflow by default. Those analyses need a single-cohort or pan-disease-style design with explicit covariates, subgroup analyses, and interaction tests for major biological axes such as IDH mutation status.

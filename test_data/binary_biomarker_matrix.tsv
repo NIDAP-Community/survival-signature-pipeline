@@ -1,0 +1,3 @@
+Feature	TCGA_Basal_01_A	TCGA_Basal_01_B	TCGA_Basal_01_C	TCGA_Basal_01_D	TCGA_Basal_01_E	TCGA_Basal_01_F	TCGA_LumA_01_A	TCGA_LumA_01_B	TCGA_LumA_01_C	TCGA_LumA_01_D
+TP53_mutated	1	1	0	1	0	1	0	0	1	0
+PIK3CA_mutated	0	0	1	0	1	0	1	1	0	1

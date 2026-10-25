@@ -13,6 +13,10 @@ workflow_specs <- list(
 		script = file.path("drivers", "run_single_cohort_survival.R"),
 		description = "Run single-cohort survival analysis through the reusable core engine."
 	),
+	"single-cohort-binary-biomarker-survival" = list(
+		script = file.path("drivers", "run_single_cohort_binary_biomarker_survival.R"),
+		description = "Run binary molecular-biomarker survival analysis from a prepared 0/1 feature matrix."
+	),
 	"single-cohort-analysis-plan" = list(
 		script = file.path("drivers", "run_single_cohort_analysis_plan.R"),
 		description = "Run a declarative single-cohort plan of overall, subgroup, and interaction Cox models."
@@ -54,6 +58,7 @@ print_usage <- function() {
 			"  Rscript entrypoint.R piecewise-dataset-interaction --output-dir results/example_run",
 			"  Rscript entrypoint.R piecewise-subtype-specific --subtype-list BRCA_Basal --adjust-covariates none",
 			"  Rscript entrypoint.R single-cohort-survival --expr-file test_data/tcga_expression.tsv --meta-file test_data/tcga_metadata.csv --endpoints OS",
+			"  Rscript entrypoint.R single-cohort-binary-biomarker-survival --biomarker-file test_data/binary_biomarker_matrix.tsv --meta-file test_data/tcga_metadata_no_subtype.csv --features TP53_mutated --endpoints OS",
 			"  Rscript entrypoint.R single-cohort-analysis-plan --plan-file test_data/single_cohort_analysis_plan.csv --output-dir results/example_analysis_plan",
 			"  Rscript entrypoint.R single-cohort-reporting-bundle --input-run-dir results/smoke_test_single_cohort --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv",
 			"  Rscript entrypoint.R subgroup-forest-bundle --subgroup-summary-table test_data/single_cohort_subgroup_summary.csv --subgroup-type-filter subtype",

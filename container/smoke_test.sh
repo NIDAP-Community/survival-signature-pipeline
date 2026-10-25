@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Run the canonical single-cohort fixture inside an already built image and
-# assert the minimal portable artifact contract. The temporary output directory
-# is retained after completion so failures and generated files are inspectable.
+# Run the maintained expression and binary-biomarker fixtures inside an already
+# built image and assert the minimal portable artifact contract. The temporary
+# output directory is retained after completion so failures and generated files
+# are inspectable.
 
 set -euo pipefail
 
@@ -9,12 +10,13 @@ script_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(CDPATH= cd -- "${script_dir}/.." && pwd)"
 image_tag="${1:-survival-signature-pipeline:local}"
 smoke_root="$(mktemp -d "${TMPDIR:-/tmp}/survival-container-smoke.XXXXXX")"
-output_dir="${smoke_root}/output"
+expression_output_dir="${smoke_root}/expression_output"
+binary_output_dir="${smoke_root}/binary_output"
 
 "${script_dir}/run_docker.sh" \
   "${image_tag}" \
   "${project_dir}/test_data" \
-  "${output_dir}" \
+  "${expression_output_dir}" \
   single-cohort-survival \
   --expr-file /data/tcga_expression.tsv \
   --meta-file /data/tcga_metadata_no_subtype.csv \
@@ -23,14 +25,34 @@ output_dir="${smoke_root}/output"
   --adjust-covariates none \
   --output-dir /output
 
+"${script_dir}/run_docker.sh" \
+  "${image_tag}" \
+  "${project_dir}/test_data" \
+  "${binary_output_dir}" \
+  single-cohort-binary-biomarker-survival \
+  --biomarker-file /data/binary_biomarker_matrix.tsv \
+  --meta-file /data/tcga_metadata_no_subtype.csv \
+  --features TP53_mutated \
+  --endpoints OS \
+  --adjust-covariates none \
+  --output-dir /output
+
 required_files=(
-  "${output_dir}/RUN_METADATA.md"
-  "${output_dir}/logs/sessionInfo.txt"
-  "${output_dir}/run_manifest.csv"
-  "${output_dir}/OS/results_univariate.csv"
-  "${output_dir}/OS/grouped_gene_cox_results.csv"
-  "${output_dir}/OS/OS_results.rds"
-  "${output_dir}/OS/KM_GENE_D.png"
+  "${expression_output_dir}/RUN_METADATA.md"
+  "${expression_output_dir}/logs/sessionInfo.txt"
+  "${expression_output_dir}/run_manifest.csv"
+  "${expression_output_dir}/OS/results_univariate.csv"
+  "${expression_output_dir}/OS/grouped_gene_cox_results.csv"
+  "${expression_output_dir}/OS/OS_results.rds"
+  "${expression_output_dir}/OS/KM_GENE_D.png"
+  "${binary_output_dir}/RUN_METADATA.md"
+  "${binary_output_dir}/logs/sessionInfo.txt"
+  "${binary_output_dir}/binary_biomarker_definition.csv"
+  "${binary_output_dir}/run_manifest.csv"
+  "${binary_output_dir}/OS/results_univariate.csv"
+  "${binary_output_dir}/OS/grouped_biomarker_cox_results.csv"
+  "${binary_output_dir}/OS/OS_results.rds"
+  "${binary_output_dir}/OS/KM_TP53_mutated.png"
 )
 
 for required_file in "${required_files[@]}"; do
@@ -40,4 +62,4 @@ for required_file in "${required_files[@]}"; do
   fi
 done
 
-printf 'Container smoke test passed. Artifacts retained at: %s\n' "${output_dir}"
+printf 'Container smoke test passed. Artifacts retained at: %s\n' "${smoke_root}"

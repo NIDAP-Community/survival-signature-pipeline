@@ -32,7 +32,8 @@ At a minimum, a single-cohort request supplies:
 
 | Logical input | Required content |
 | --- | --- |
-| Expression table | Delimited table with a unique gene identifier column and sample columns. |
+| Expression table | Delimited table with a unique gene identifier column and sample columns, for expression/signature requests. |
+| Binary biomarker table | Delimited table with a unique feature column and subject columns containing only 0, 1, or missing, for binary-biomarker requests. |
 | Metadata table | Delimited table with a unique sample identifier column and paired endpoint event/time columns. |
 | Optional analysis plan | CSV plan only when running single-cohort-analysis-plan. |
 
@@ -42,11 +43,11 @@ logical inputs, unreadable objects, and unapproved input locations.
 
 ## Initial Application Request Surface
 
-For the first application integration, expose single-cohort-survival only. It
-is the appropriate companion to a single-cohort multi-gene-correlation
-experience and has a bounded, well-documented input/output contract. The
-adapter should translate validated form values into explicit CLI flags rather
-than accepting arbitrary shell arguments.
+For the first application integration, expose `single-cohort-survival` and,
+when mutation calls are available, `single-cohort-binary-biomarker-survival`.
+Both have bounded, well-documented input/output contracts. The adapter should
+translate validated form values into explicit CLI flags rather than accepting
+arbitrary shell arguments.
 
 The application request should include:
 
@@ -60,6 +61,7 @@ The application request should include:
 | Covariates and cohort filter | Allow only metadata columns verified for the staged table. |
 | Gene resolution | Offer none and l2p; when l2p is selected, surface the generated mapping report. |
 | Grouping and analysis settings | Constrain values to the driver’s documented enums and safe numeric ranges. |
+| Binary biomarker selections | For the binary workflow, stage an approved 0/1 matrix, verify feature and subject identifiers, and pass only configured labels for 0 and 1. Do not ask the container to query PostgreSQL or derive mutation calls. |
 
 The adapter should set a unique output directory under /output itself. It must
 not let callers choose an arbitrary output path.
@@ -88,6 +90,11 @@ operation. If the application offers it, retain saved result RDS objects for
 the analysis run and submit the reporting bundle as a linked follow-on job
 using the first job's result directory as its approved input. Do not make the
 reporting bundle silently rerun the survival analysis.
+
+For a completed binary-biomarker run, collect its run-level provenance and
+each endpoint directory, including `grouped_biomarker_cox_results.csv`, the
+endpoint summary, and any generated KM figures. Do not present an input value
+as a mutation unless the staged upstream data contract identifies it as one.
 
 ## Required Application Guards
 

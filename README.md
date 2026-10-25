@@ -1,6 +1,6 @@
 # Survival Signature Pipeline
 
-An R command-line workflow for survival analysis of gene expression and expression signatures. It supports one prepared cohort, a declarative plan of adjusted/subgroup/interaction Cox models, and pooled analyses of two harmonized independent cohorts. All maintained workflows write run-scoped tables, figures, and provenance metadata.
+An R command-line workflow for survival analysis of prepared molecular features and clinical outcomes. It supports gene expression and expression signatures, binary molecular biomarkers such as mutation status, a declarative plan of adjusted/subgroup/interaction Cox models, and pooled analyses of two harmonized independent cohorts. All maintained workflows write run-scoped tables, figures, and provenance metadata.
 
 ## Features
 
@@ -211,6 +211,17 @@ Sample_2,0,42,0,42,61,Treatment
 
 Prepare filtering and sample inclusion upstream. Maintained drivers analyze the rows supplied to them; they do not impose a tumor-type or sample-type filter.
 
+### Binary biomarker matrix
+
+Use `single-cohort-binary-biomarker-survival` for a precomputed, feature-by-subject table where `0` is the reference state and `1` is the comparison state. It is appropriate for mutation calls after the calling workflow has made and documented the call; it does not infer mutations from expression values. Missing values are permitted and mean that the feature was not evaluable for that subject.
+
+```text
+Feature       Sample_1  Sample_2  Sample_3
+TP53_mutated  1         0         1
+```
+
+Feature identifiers are arbitrary labels in this workflow, so it can represent a gene-level mutation, a copy-number event after binary calling, or another already-defined binary molecular state. The matrix and metadata must use the same subject identifiers.
+
 ### Gene identifiers
 
 The maintained gene-consuming workflows can normalize user-supplied human gene symbols with the pinned `l2psupp::updategenes()` resolver (`--gene-resolution l2p`). This opt-in behavior leaves existing calls unchanged. The expression matrix is never renamed or rewritten. An exact input row is preferred; otherwise, an updated symbol is used only when it matches an existing expression row (in both matrices for a two-cohort workflow). Every run writes `tables/gene_identifier_resolution.csv`, preserving the submitted name, L2P result, package version, matched expression row, and any unresolved gene.
@@ -222,6 +233,7 @@ The maintained gene-consuming workflows can normalize user-supplied human gene s
 | Workflow | Use when |
 | --- | --- |
 | `single-cohort-survival` | You need grouped and continuous gene/signature survival analysis, Kaplan-Meier plots, and per-endpoint outputs for one cohort. |
+| `single-cohort-binary-biomarker-survival` | You have a prepared 0/1 molecular-feature matrix, such as mutation status, and need mutated/positive versus wild-type/negative KM and Cox results. |
 | `single-cohort-analysis-plan` | You need a reproducible collection of adjusted overall effects, filtered subgroup effects, or formal feature-by-group interaction tests for one prepared cohort. |
 | `subgroup-forest-bundle` | You already have a shared subgroup-effect summary table and need a forest plot. |
 | `piecewise-dataset-interaction` | You have two harmonized, independent comparable cohorts and need pooled piecewise models with dataset interactions. |
@@ -297,6 +309,24 @@ For an individual gene, use an explicit threshold:
 ```
 
 This grouping is only available for individual genes, not `Signature`.
+
+## Run a Binary Molecular-Biomarker Analysis
+
+This workflow keeps molecular calling upstream and models the submitted binary values directly. In this example, `1` is labeled `Mutated` and is compared with `0`, labeled `Wild type`:
+
+```bash
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-binary-biomarker-survival \
+  --biomarker-file test_data/binary_biomarker_matrix.tsv \
+  --meta-file test_data/tcga_metadata_no_subtype.csv \
+  --features TP53_mutated \
+  --negative-label "Wild type" \
+  --positive-label Mutated \
+  --endpoints OS,PFI \
+  --adjust-covariates none \
+  --output-dir results/binary_biomarker_smoke
+```
+
+For each endpoint, the run writes the KM plot, `grouped_biomarker_cox_results.csv`, an endpoint summary, result object, and the same run-level provenance files used by the expression workflow. The KM plot and log-rank test are unadjusted; grouped Cox rows provide the `1` versus `0` hazard ratio and, when requested, its covariate-adjusted estimate. The binary workflow accepts only `0`, `1`, or missing values and does not run L2P because its feature labels need not be gene symbols.
 
 ## Run a Declarative Analysis Plan
 

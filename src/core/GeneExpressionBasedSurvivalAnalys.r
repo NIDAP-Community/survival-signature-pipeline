@@ -1,19 +1,20 @@
-#' Gene Expression-Based Survival Analysis with Time-Dependent Effects
+#' Molecular Feature-Based Survival Analysis with Time-Dependent Effects
 #'
-#' Performs comprehensive survival analysis on gene expression data including
-#' univariate and multivariate Cox regression, LASSO selection, Kaplan-Meier
-#' plotting, and time-dependent proportional hazards analysis.
+#' Performs comprehensive survival analysis on prepared molecular feature data,
+#' including univariate and multivariate Cox regression, LASSO selection,
+#' Kaplan-Meier plotting, and time-dependent proportional hazards analysis.
 #'
-#' @param expression_data Data frame or matrix with genes in rows and samples in columns.
-#'   First column should contain gene identifiers.
+#' @param expression_data Data frame or matrix with features in rows and samples in columns.
+#'   First column should contain feature identifiers. The historic argument name
+#'   is retained for compatibility with expression workflows.
 #' @param metadata Data frame with sample metadata including survival outcomes and covariates.
 #' @param sample_col Character. Column name in metadata containing sample identifiers.
-#' @param gene_col Character. Column name in expression_data containing gene names.
-#' @param genes Character vector. Gene names to analyze.
+#' @param gene_col Character. Column name in expression_data containing feature names.
+#' @param genes Character vector. Feature names to analyze.
 #' @param event_col Character. Column name for event indicator (1=event, 0=censored or "dead"/"alive").
 #' @param time_col Character. Column name for survival/follow-up time.
 #' @param clinical_covariates Character vector. Column names of clinical covariates to adjust for.
-#' @param split_method Character. Method to split samples: "median", "quartiles", "tertiles", "percentiles", or "detectable".
+#' @param split_method Character. Method to split samples: "median", "quartiles", "tertiles", "percentiles", "detectable", or "binary".
 #' @param percentile_cutoffs Numeric vector of length 2. Percentile cutoffs if split_method="percentiles".
 #' @param detection_threshold Numeric. Expression threshold used when split_method="detectable".
 #' @param include_groups Character vector. Which groups to include: "low", "mid", "high".
@@ -77,7 +78,7 @@ analyze_survival_expression <- function(
   event_col = "event",
   time_col = "time",
   clinical_covariates = NULL,
-  split_method = c("tertiles", "quartiles", "median", "percentiles", "detectable"),
+  split_method = c("tertiles", "quartiles", "median", "percentiles", "detectable", "binary"),
   percentile_cutoffs = c(25, 75),
   detection_threshold = 0,
   signature_aggregation = c("sum", "mean"),
@@ -157,6 +158,8 @@ analyze_survival_expression <- function(
   label_low = "Low",
   label_mid = "Mid",
   label_high = "High",
+  binary_negative_label = "Absent",
+  binary_positive_label = "Present",
 
 
         # Titles & text sizes
@@ -317,6 +320,16 @@ analyze_survival_expression <- function(
   }
   
   cluster_display_settings <- function(split_method, local_plot_params) {
+    if (split_method == "binary") {
+      return(list(
+        color_map = c(A = local_plot_params$color_low, C = local_plot_params$color_high),
+        label_map = c(
+          A = local_plot_params$binary_negative_label %||% "Absent",
+          C = local_plot_params$binary_positive_label %||% "Present"
+        )
+      ))
+    }
+
     if (split_method == "detectable") {
       return(list(
         color_map = c(A = local_plot_params$color_low, C = local_plot_params$color_high),
@@ -400,6 +413,17 @@ analyze_survival_expression <- function(
       levels <- keep
     } else if (split_method == "detectable") {
       cl <- ifelse(is.na(x_num), NA, ifelse(x_num <= detection_threshold, "A", "C"))
+      keep <- c()
+      if ("low" %in% include_groups) keep <- c(keep, "A")
+      if ("high" %in% include_groups) keep <- c(keep, "C")
+      cl[!(cl %in% keep)] <- NA
+      levels <- keep
+    } else if (split_method == "binary") {
+      invalid <- !is.na(x_num) & !(x_num %in% c(0, 1))
+      if (any(invalid)) {
+        stop("split_method='binary' requires non-missing feature values of exactly 0 or 1.")
+      }
+      cl <- ifelse(is.na(x_num), NA, ifelse(x_num == 0, "A", "C"))
       keep <- c()
       if ("low" %in% include_groups) keep <- c(keep, "A")
       if ("high" %in% include_groups) keep <- c(keep, "C")
@@ -581,8 +605,18 @@ analyze_survival_expression <- function(
     }
     p <- p2
 
-    primary_contrast_label <- if (split_method == "detectable") "Detectable vs Undetectable" else "High vs Low"
-    secondary_contrast_label <- if (split_method %in% c("detectable", "median")) NULL else "Mid vs Low"
+    primary_contrast_label <- if (split_method == "detectable") {
+      "Detectable vs Undetectable"
+    } else if (split_method == "binary") {
+      paste0(
+        local_plot_params$binary_positive_label %||% "Present",
+        " vs ",
+        local_plot_params$binary_negative_label %||% "Absent"
+      )
+    } else {
+      "High vs Low"
+    }
+    secondary_contrast_label <- if (split_method %in% c("detectable", "binary", "median")) NULL else "Mid vs Low"
 
     # Helper to build comparison lines for the active grouping mode.
     build_lines <- function(cox_summary, prefix) {
@@ -639,7 +673,9 @@ analyze_survival_expression <- function(
         if (identical(prefix, "adj") && isTRUE(attempted_adj)) {
           # Provide placeholders for both comparisons
           pl <- data.frame(
-            Test = if (split_method == "detectable") "adj Detectable vs Undetectable" else if (split_method == "median") "adj H vs L" else c("adj H vs L", "adj M vs L"),
+            Test = if (split_method %in% c("detectable", "binary")) {
+              paste("adj", primary_contrast_label)
+            } else if (split_method == "median") "adj H vs L" else c("adj H vs L", "adj M vs L"),
             HR = NA_real_,
             CI = "",
             p = NA_real_
@@ -665,8 +701,8 @@ analyze_survival_expression <- function(
         }
       }
       if (split_method == "median" && "clusterB" %in% rn) add_row("clusterB", "H vs L")
-      if (split_method != "median" && "clusterC" %in% rn) add_row("clusterC", if (split_method == "detectable") "Detectable vs Undetectable" else "H vs L")
-      if (!split_method %in% c("detectable", "median") && "clusterB" %in% rn) add_row("clusterB", "M vs L")
+      if (split_method != "median" && "clusterC" %in% rn) add_row("clusterC", if (split_method %in% c("detectable", "binary")) primary_contrast_label else "H vs L")
+      if (!split_method %in% c("detectable", "binary", "median") && "clusterB" %in% rn) add_row("clusterB", "M vs L")
       if (!length(rows)) {
         idx_any <- grep("^cluster", rn)
         if (length(idx_any)) {
@@ -870,14 +906,14 @@ analyze_survival_expression <- function(
     ) %>%
     dplyr::pull(.data[[sample_col]])
   
-  # Intersect with expression data samples
+  # Intersect with molecular-feature data samples
   expr_samples <- setdiff(colnames(expression_data), gene_col)
   available_samples <- intersect(expr_samples, complete_samples)
   
   if (verbose) {
     cat(sprintf("Total samples in metadata: %d\n", nrow(metadata)))
     cat(sprintf("Samples with complete survival data: %d\n", length(complete_samples)))
-    cat(sprintf("Samples with expression data: %d\n", length(expr_samples)))
+    cat(sprintf("Samples with molecular feature data: %d\n", length(expr_samples)))
     cat(sprintf("Final samples for analysis: %d\n", length(available_samples)))
   }
   
@@ -885,7 +921,7 @@ analyze_survival_expression <- function(
     stop("No samples with both expression and survival metadata!")
   }
   
-  # Select and z-score expression data
+  # Select feature data and derive z-scores for continuous modeling.
   selected_data <- expression_data %>%
     dplyr::select(dplyr::all_of(c(gene_col, available_samples))) %>%
     dplyr::filter(.data[[gene_col]] %in% genes)
@@ -893,7 +929,7 @@ analyze_survival_expression <- function(
   raw_gene_mat <- as.matrix(selected_data[, -1])
   rownames(raw_gene_mat) <- selected_data[[gene_col]]
   gene_mat <- t(scale(t(raw_gene_mat)))  # Z-score by gene for continuous modeling
-  grouped_gene_mat <- if (split_method == "detectable") raw_gene_mat else gene_mat
+  grouped_gene_mat <- if (split_method %in% c("detectable", "binary")) raw_gene_mat else gene_mat
   
   # Both forms use gene-wise z-scores. Sum preserves the established default;
   # mean is useful when reproducing analyses that report a per-gene average.
@@ -995,6 +1031,14 @@ analyze_survival_expression <- function(
         ))
       }
 
+      if (split_method == "binary") {
+        return(list(
+          comparison = "Present vs Absent",
+          reference_group = "Absent",
+          comparison_group = "Present"
+        ))
+      }
+
       if (term_name == "clusterC") {
         return(list(
           comparison = "High vs Low",
@@ -1057,7 +1101,7 @@ analyze_survival_expression <- function(
   
   # --- MODULE 1: INDIVIDUAL GENE UNIVARIATE COX ---
   if ("individual" %in% steps_to_run) {
-    if (verbose) cat("\n=== Individual Gene Analysis (Univariate) ===\n")
+    if (verbose) cat("\n=== Individual Feature Analysis (Univariate) ===\n")
     
     res_univ <- lapply(genes, function(g) {
       expr_g <- get_expr_aligned(g, grouped_gene_mat, merged_base, available_samples)
@@ -1092,7 +1136,7 @@ analyze_survival_expression <- function(
   
   # --- MODULE 2: INDIVIDUAL GENE COVARIATE-ADJUSTED COX ---
   if ("individual+covariates" %in% steps_to_run) {
-    if (verbose) cat("\n=== Individual Gene Analysis (Covariate-Adjusted) ===\n")
+    if (verbose) cat("\n=== Individual Feature Analysis (Covariate-Adjusted) ===\n")
     
     if (is.null(clinical_covariates) || length(clinical_covariates) == 0) {
       warning("No clinical covariates specified; skipping adjusted analysis")
@@ -1804,7 +1848,7 @@ analyze_survival_expression <- function(
   
   # --- MODULE 5: INDIVIDUAL GENE KM PLOTS ---
   if ("km_individual" %in% steps_to_run) {
-    if (verbose) cat("\n=== Individual Gene KM Plots ===\n")
+    if (verbose) cat("\n=== Individual Feature KM Plots ===\n")
   genes_to_plot <- genes
   genes_for_combination <- genes  # track full set actually plotted if we fallback
     grouped_gene_rows <- list()
@@ -1812,14 +1856,14 @@ analyze_survival_expression <- function(
       sig_genes <- results$results_adjusted$Gene[results$results_adjusted$FDR < fdr_threshold]
       if (length(sig_genes) > 0) {
         genes_to_plot <- intersect(genes_to_plot, sig_genes)
-        if (verbose) cat("Plotting", length(genes_to_plot), "significant genes\n")
+        if (verbose) cat("Plotting", length(genes_to_plot), "significant features\n")
       } else {
-        if (verbose) cat("No genes passed FDR <", fdr_threshold, "; plotting all", length(genes_to_plot), "genes instead.\n")
+        if (verbose) cat("No features passed FDR <", fdr_threshold, "; plotting all", length(genes_to_plot), "features instead.\n")
         genes_for_combination <- genes_to_plot
       }
     }
     for (g in genes_to_plot) {
-      if (!(g %in% rownames(gene_mat))) { if (verbose) message("Skipping ", g, " (not in expression matrix)"); next }
+      if (!(g %in% rownames(gene_mat))) { if (verbose) message("Skipping ", g, " (not in feature matrix)"); next }
       expr_g <- get_expr_aligned(g, grouped_gene_mat, merged_base, available_samples)
       surv_gene <- merged_base %>% dplyr::mutate(cluster = make_clusters(expr_g, split_method, percentile_cutoffs, include_groups, detection_threshold)) %>% dplyr::filter(!is.na(cluster))
       if (nrow(surv_gene) == 0 || nlevels(surv_gene$cluster) < 2) { if (verbose) message("Skipping ", g, " (insufficient strata)"); next }
@@ -1988,7 +2032,7 @@ analyze_survival_expression <- function(
         )
       }
     }
-    # Combine individual gene plots into multi-panel figures if requested
+    # Combine individual feature plots into multi-panel figures if requested.
     if (combine_gene_plots) {
   # Use genes_for_combination if defined (may include all genes when none significant)
   gene_base_set <- if (exists("genes_for_combination")) genes_for_combination else genes_to_plot
@@ -1999,9 +2043,9 @@ analyze_survival_expression <- function(
         total <- length(grobs)
         per_page <- min(max_plots_per_page, total)
         pages <- ceiling(total / per_page)
-        if (verbose) cat("Combining", total, "gene KM plots across", pages, "page(s).\n")
+        if (verbose) cat("Combining", total, "feature KM plots across", pages, "page(s).\n")
         if (!requireNamespace("cowplot", quietly = TRUE) && !requireNamespace("patchwork", quietly = TRUE) && !requireNamespace("gridExtra", quietly = TRUE)) {
-          warning("No layout package (cowplot/patchwork/gridExtra) available; skipping combined gene plot figure.")
+          warning("No layout package (cowplot/patchwork/gridExtra) available; skipping combined feature plot figure.")
         } else {
           for (pg in seq_len(pages)) {
             idx_start <- (pg - 1) * per_page + 1
@@ -2115,7 +2159,7 @@ analyze_survival_expression <- function(
                 }
               }
             }
-          # Continuous models for gene expression
+          # Continuous models for the molecular feature.
           cont_unadj_fit <- try(survival::coxph(survival::Surv(time, event) ~ expr_val, data = df), silent = TRUE)
           cont_unadj <- if (!inherits(cont_unadj_fit, "try-error")) summary(cont_unadj_fit) else NULL
           cont_adj <- NULL
@@ -2207,7 +2251,7 @@ analyze_survival_expression <- function(
               total <- length(grobs)
               per_page <- min(max_plots_per_page, total)
               pages <- ceiling(total / per_page)
-              if (verbose) cat("Combining", total, tag, "gene KM PNG fallback plots across", pages, "page(s). (suffix=", suffix, ")\n", sep=" ")
+              if (verbose) cat("Combining", total, tag, "feature KM PNG fallback plots across", pages, "page(s). (suffix=", suffix, ")\n", sep=" ")
               for (pg in seq_len(pages)) {
                 idx_start <- (pg - 1) * per_page + 1
                 idx_end <- min(pg * per_page, total)
@@ -2242,7 +2286,7 @@ analyze_survival_expression <- function(
             total <- length(grobs)
             per_page <- min(max_plots_per_page, total)
             pages <- ceiling(total / per_page)
-            if (verbose) cat("Combining", total, tag, "gene KM plots across", pages, "page(s). (suffix=", suffix, ")\n", sep=" ")
+            if (verbose) cat("Combining", total, tag, "feature KM plots across", pages, "page(s). (suffix=", suffix, ")\n", sep=" ")
             for (pg in seq_len(pages)) {
               idx_start <- (pg - 1) * per_page + 1
               idx_end <- min(pg * per_page, total)
@@ -2275,7 +2319,7 @@ analyze_survival_expression <- function(
           }
           assemble_window("_early", "early")
           assemble_window("_late",  "late")
-          if (verbose) cat("Finished assembling early and late combined gene KM panels.\n")
+          if (verbose) cat("Finished assembling early and late combined feature KM panels.\n")
           # (Removed early+late single figure per user clarification; keep separate early and late combined only)
         }
       }
@@ -2312,6 +2356,8 @@ analyze_survival_expression <- function(
           "_",
           if (split_method == "detectable") {
             if (lev == "A") "Undetectable" else "Detectable"
+          } else if (split_method == "binary") {
+            if (lev == "A") (plot_params$binary_negative_label %||% "Absent") else (plot_params$binary_positive_label %||% "Present")
           } else if (lev == "A") {
             "Low"
           } else if (split_method == "median" && lev == "B") {
@@ -2358,7 +2404,7 @@ analyze_survival_expression <- function(
     }
     
     cat(sprintf("Total samples analyzed: %d\n", nrow(merged_base)))
-    cat(sprintf("Genes in signature: %d\n", length(genes)))
+    cat(sprintf("Features analyzed: %d\n", length(genes)))
   }
   
   return(results)

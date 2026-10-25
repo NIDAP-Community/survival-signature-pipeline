@@ -39,6 +39,7 @@ This command exercises a real maintained workflow through entrypoint.R while als
 ## Files
 
 - tcga_expression.tsv
+- binary_biomarker_matrix.tsv
 - tcga_metadata.csv
 - tcga_metadata_no_subtype.csv
 - metabric_expression.tsv
@@ -47,6 +48,22 @@ This command exercises a real maintained workflow through entrypoint.R while als
 - gbm_lgg_p53beta_adjusted_effects_subgroup_summary.csv
 - gbm_lgg_p53beta_interactions_subgroup_summary.csv
 - single_cohort_analysis_plan.csv
+
+## Binary Biomarker Smoke Test
+
+The binary-biomarker fixture is a synthetic, feature-by-subject 0/1 table. It
+is an interface test for patient-level binary calls such as mutation status;
+it is not a scientifically interpretable mutation dataset.
+
+```bash
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-binary-biomarker-survival \
+  --biomarker-file test_data/binary_biomarker_matrix.tsv \
+  --meta-file test_data/tcga_metadata_no_subtype.csv \
+  --features TP53_mutated \
+  --endpoints OS \
+  --adjust-covariates none \
+  --output-dir results/binary_biomarker_smoke
+```
 
 ## Example Commands
 

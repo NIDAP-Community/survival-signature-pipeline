@@ -1,5 +1,8 @@
 # 2026-10-25
 
+- added a maintained binary molecular-biomarker workflow for prepared 0/1 feature matrices, beginning with mutation-status use cases while leaving expression/signature inputs unchanged
+- added strict binary-value, feature, subject, and metadata validation; named 0/1 labels; KM plots; grouped and covariate-adjusted Cox exports; provenance; and a synthetic smoke fixture
+- documented the portable and AWS-adapter boundary: the calling application stages approved binary calls and clinical metadata, while the container neither queries PostgreSQL nor derives mutation calls
 - clarified the README survival demonstration so users can distinguish the
   unadjusted Kaplan-Meier curves from the continuous and grouped Cox tests,
   identify the covariate adjustment set and complete-case basis, and interpret

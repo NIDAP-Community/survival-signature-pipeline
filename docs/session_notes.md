@@ -1,5 +1,19 @@
 # Session Notes
 
+## 2026-10-25 Binary Molecular-Biomarker Survival Workflow
+
+- Added `single-cohort-binary-biomarker-survival` as a maintained, separate
+  CLI surface for prepared patient-level 0/1 feature matrices. The initial
+  intended use is somatic mutation status, with 0/1 labels supplied explicitly
+  by the caller.
+- Kept the existing expression/signature workflow unchanged. The reusable core
+  gained a strict binary grouping mode so binary KM displays and grouped Cox
+  comparisons use the submitted reference/comparison labels rather than
+  expression-oriented low/high labels.
+- Documented that OncoChat or another adapter owns authorized extraction and
+  harmonization from PostgreSQL into a read-only staged matrix plus metadata;
+  the image remains portable and credential-free.
+
 ## 2026-10-25 README Result-Interpretation Clarification
 
 - Reworked the public METABRIC PAM50 proliferation-module demonstration text so
