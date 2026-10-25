@@ -51,18 +51,18 @@ reproducible run, pull and launch it by immutable digest rather than by a
 mutable tag:
 
 ```bash
-docker pull ghcr.io/nidap-community/survival-signature-pipeline@sha256:a25e77f298eb602bf0a5e088a295cce783dd987baf23b7dada4d1cafea9ed35f
+docker pull ghcr.io/nidap-community/survival-signature-pipeline@sha256:710d62f89227078ed564b1aa721588c87e853d583b2c9fbd4e34ee0077eb6c95
 ```
 
 The corresponding source-revision tag is
-`99cbdf1cfdcdb4ecf9c0ed5cbe4ac6ab996f7092`; it is provided for discovery,
+`57b6e17956ed72b79fad6f8c693f367e2dcc5792`; it is provided for discovery,
 while the digest above is the deployment identity. A Docker invocation should
 bind caller-controlled inputs read-only at `/data` and a fresh output directory
 at `/output`. The repository helper enforces that layout:
 
 ```bash
 container/run_docker.sh \
-  ghcr.io/nidap-community/survival-signature-pipeline@sha256:a25e77f298eb602bf0a5e088a295cce783dd987baf23b7dada4d1cafea9ed35f \
+  ghcr.io/nidap-community/survival-signature-pipeline@sha256:710d62f89227078ed564b1aa721588c87e853d583b2c9fbd4e34ee0077eb6c95 \
   /path/to/input_directory \
   /path/to/output_directory \
   single-cohort-survival \
@@ -79,7 +79,7 @@ job:
 
 ```bash
 apptainer pull survival-signature-pipeline.sif \
-  docker://ghcr.io/nidap-community/survival-signature-pipeline@sha256:a25e77f298eb602bf0a5e088a295cce783dd987baf23b7dada4d1cafea9ed35f
+  docker://ghcr.io/nidap-community/survival-signature-pipeline@sha256:710d62f89227078ed564b1aa721588c87e853d583b2c9fbd4e34ee0077eb6c95
 ```
 
 See [container/README.md](container/README.md) for the distribution model and

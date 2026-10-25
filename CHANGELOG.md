@@ -1,5 +1,6 @@
 # 2026-10-25
 
+- rebuilt and published the validated linux/amd64 container for source revision 57b6e17956ed72b79fad6f8c693f367e2dcc5792; the immutable GHCR deployment digest is sha256:710d62f89227078ed564b1aa721588c87e853d583b2c9fbd4e34ee0077eb6c95
 - added explicit ESTIMATE-score and cell-fraction contexts to the maintained continuous-biomarker workflow, including score provenance notes and immune-specific result interpretation
 - added strict relative-composition validation for cell-fraction runs: all staged components must be finite fractions in [0,1] and complete subject totals must equal one within a configurable tolerance
 - documented that cell-fraction results are exploratory one-feature associations rather than multivariable compositional survival models, and added ESTIMATE and cell-fraction smoke fixtures

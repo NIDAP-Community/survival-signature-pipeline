@@ -22,7 +22,7 @@ behavior.
 The canonical artifact is an OCI image published to GitHub Container Registry:
 
 ```text
-ghcr.io/nidap-community/survival-signature-pipeline@sha256:a25e77f298eb602bf0a5e088a295cce783dd987baf23b7dada4d1cafea9ed35f
+ghcr.io/nidap-community/survival-signature-pipeline@sha256:710d62f89227078ed564b1aa721588c87e853d583b2c9fbd4e34ee0077eb6c95
 ```
 
 Deploy callers by digest, not by mutable tag. The full source-revision tag is
@@ -37,7 +37,7 @@ HPC users can convert the OCI image for Apptainer/Singularity where needed:
 
 ```bash
 apptainer pull survival-signature-pipeline.sif \
-  docker://ghcr.io/nidap-community/survival-signature-pipeline@sha256:a25e77f298eb602bf0a5e088a295cce783dd987baf23b7dada4d1cafea9ed35f
+  docker://ghcr.io/nidap-community/survival-signature-pipeline@sha256:710d62f89227078ed564b1aa721588c87e853d583b2c9fbd4e34ee0077eb6c95
 ```
 
 No container binaries or `.sif` files belong in Git.

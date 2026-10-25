@@ -1,5 +1,16 @@
 # Session Notes
 
+## 2026-10-25 Container Release for Molecular Biomarker Workflows
+
+- Built and passed the expanded linux/amd64 container smoke suite for the
+  maintained expression, binary, continuous, ESTIMATE-score, and cell-fraction
+  paths.
+- Published the OCI image from source revision
+  `57b6e17956ed72b79fad6f8c693f367e2dcc5792` to GHCR. Its immutable digest is
+  `sha256:710d62f89227078ed564b1aa721588c87e853d583b2c9fbd4e34ee0077eb6c95`.
+- The macOS development host emitted the expected amd64-on-arm64 emulation
+  warning; the published artifact remains the intended linux/amd64 target.
+
 ## 2026-10-25 Immune Score and Cell-Fraction Contexts
 
 - Extended the maintained continuous-biomarker workflow with explicit
