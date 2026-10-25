@@ -92,45 +92,96 @@ staging, and artifact collection.
 
 ## Example Output
 
+### How to read this demonstration
+
+These assets are one **exploratory demonstration**, not a clinical classifier
+or a claim about an individual patient. They were generated from the public
+METABRIC breast-cancer cohort with an unweighted 11-gene PAM50 proliferation
+module. Each signature member was z-scored within the eligible cohort before
+the module score was calculated. The same run produced the two KM plots, the
+two forest plots, and the table below.
+
+For the visual display, the eligible samples were divided into within-cohort
+low, mid, and high score tertiles (`n = 657` per group; `N = 1,971` before
+covariate complete-case filtering). Tertiles make the curves easier to inspect;
+they are not the only analysis. The statistics panel also reports continuous
+Cox models that retain the full score information rather than discarding it
+into groups.
+
+| Label in the KM statistics panel | Analysis shown | Reference / interpretation |
+| --- | --- | --- |
+| `cont (unadj)` | Cox proportional-hazards model with the signature score as a continuous predictor | HR for a one-unit increase in the calculated signature score; all eligible samples; no clinical covariates. |
+| `cont (adj)` | Continuous Cox model adjusted for the listed clinical covariates | Same continuous signature effect after complete-case adjustment. |
+| `unadj H vs L`, `unadj M vs L` | Cox model with the three-level tertile group as the predictor | Low tertile is the reference; HRs compare the high or mid tertile with low. |
+| `adj H vs L`, `adj M vs L` | Three-level tertile Cox model adjusted for the listed clinical covariates | Same tertile comparisons after complete-case adjustment. |
+
+The plotted curves are **unadjusted Kaplan-Meier estimates**. Short marks on a
+curve are censoring times; the vertical dashed lines mark the estimated median
+survival time for each tertile. The `p` values printed in the statistics panel
+and in the table below are two-sided Wald tests for Cox-model coefficients.
+They are not an omnibus log-rank p value. A global log-rank comparison is a
+separate, unadjusted test and should not be substituted for an adjusted Cox
+comparison.
+
+The demonstration uses the input cohort's declared endpoint fields: `OS` /
+`OS_time` for overall survival and `PFI` / `PFI_time` for progression-free
+interval. Event definitions and follow-up origin come from the supplied
+metadata; users must confirm those cohort-specific definitions before comparing
+endpoints or cohorts.
+
 ![Overall-survival Kaplan-Meier plot for the PAM50 proliferation-module demonstration](assets/pam50_proliferation_metabric_os_km.png)
 
-This unweighted, 11-gene PAM50 proliferation-module demonstration in METABRIC
-starts with the OS Kaplan-Meier display. It shows unadjusted low-, mid-, and
-high-signature tertiles, censoring marks, group sizes, and a compact model
-summary. Continuous-score estimates use all eligible samples.
+**Overall survival (OS).** The three curves are the unadjusted KM estimates
+for the score tertiles. The panel beneath them reports both continuous-score
+and tertile Cox effects. The adjusted rows use `Diagnosis_Age`, `tumor_size`,
+`N`, `grade`, `ER_status_norm`, and `treatment`; their smaller `N` reflects
+complete-case filtering for those covariates.
 
 ![Progression-free-interval Kaplan-Meier plot for the PAM50 proliferation-module demonstration](assets/pam50_proliferation_metabric_pfi_km.png)
 
-The PFI display uses the same signature and tertile definition, so users can
-review both standard endpoints before comparing their model summaries.
+**Progression-free interval (PFI).** This uses the same score construction,
+tertile cutpoints, and covariate set as the OS example, but fits a separate
+model to the PFI event/time fields. It is therefore a separate endpoint
+analysis, not a second test of the OS model.
 
 ### Overall Effect Table
 
-The compact table below reports the grouped high-versus-low-tertile comparison
-for each endpoint. It complements, rather than replaces, the all-sample
-continuous Cox estimates shown in the KM statistics panels.
+This compact extract is the **grouped Cox high-versus-low tertile coefficient**
+from the same three-level models shown in the KM panels. It does not reproduce
+the continuous-score rows, the mid-versus-low rows, or every covariate term;
+those are available in the full run outputs. `N` and events differ between
+unadjusted and adjusted models because adjustment uses complete cases for all
+listed covariates. P values are unadjusted Cox Wald-test p values; no
+multiple-testing correction is applied to this four-row illustration.
 
-| Endpoint | Model | Comparison | HR | 95% CI | p value |
-| --- | --- | --- | ---: | --- | ---: |
-| OS | Unadjusted | High vs Low | 1.623 | [1.374, 1.916] | 1.21e-08 |
-| OS | Adjusted | High vs Low | 1.259 | [1.030, 1.540] | 0.025 |
-| PFI | Unadjusted | High vs Low | 3.097 | [2.412, 3.975] | 7.35e-19 |
-| PFI | Adjusted | High vs Low | 2.058 | [1.531, 2.767] | 1.74e-06 |
+| Endpoint | Cox model | Adjustment set | Comparison | N (events) | HR | 95% CI | Wald p value |
+| --- | --- | --- | --- | ---: | ---: | --- | ---: |
+| OS | Grouped, unadjusted | None | High vs Low tertile | 1,971 (891) | 1.623 | [1.374, 1.916] | 1.21e-08 |
+| OS | Grouped, adjusted | Age, tumor size, N, grade, ER status, treatment | High vs Low tertile | 1,843 (828) | 1.259 | [1.030, 1.540] | 0.025 |
+| PFI | Grouped, unadjusted | None | High vs Low tertile | 1,971 (506) | 3.097 | [2.412, 3.975] | 7.35e-19 |
+| PFI | Grouped, adjusted | Age, tumor size, N, grade, ER status, treatment | High vs Low tertile | 1,843 (485) | 2.058 | [1.531, 2.767] | 1.74e-06 |
 
 ![Overall forest plot for the PAM50 proliferation-module demonstration](assets/pam50_proliferation_metabric_overall_forest.png)
 
-The overall forest plot is the visual counterpart to the endpoint table. It
-summarizes unadjusted and covariate-adjusted high-versus-low signature effects
-for OS and PFI.
+**Overall-effect forest plot.** This is the visual counterpart to the table:
+each point is a grouped high-versus-low Cox HR, each horizontal line is its
+95% confidence interval, and the dashed vertical line is HR = 1 (no estimated
+association). Open gray markers are unadjusted models; filled blue markers are
+adjusted models. The x-axis is logarithmic, and the right-side text gives HR,
+95% CI, and the same raw Wald p value. OS and PFI are displayed in separate
+facets; the figure is not a pooled or meta-analytic estimate.
 
 ![Full adjusted Cox-model forest for the PAM50 proliferation-module demonstration](assets/pam50_proliferation_metabric_full_adjusted_forest.png)
 
-The full adjusted-model forest then shows the signature's mid- and high-tertile
-effects against the low-tertile reference, together with every retained
-covariate coefficient for OS and PFI. These figures demonstrate the reporting
-layout only; they are not an official PAM50 classifier or a clinical prediction
-model. Review proportional-hazards and time-dependent diagnostic outputs before
-interpreting a grouped KM contrast or forest plot.
+**Full adjusted-model forest.** This expands the adjusted tertile model rather
+than adding another test: it shows the signature's mid-versus-low and
+high-versus-low coefficients plus every retained covariate coefficient for OS
+and PFI. A continuous covariate HR is per one unit in the supplied metadata;
+a categorical covariate HR is a displayed level versus its input reference
+level. These figures demonstrate the reporting layout only; they are not an
+official PAM50 classifier or a clinical prediction model. Review
+proportional-hazards and time-dependent diagnostic outputs before interpreting
+a grouped KM contrast or forest plot.
 
 ## Input Files
 

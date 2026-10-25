@@ -1,3 +1,10 @@
+# 2026-10-25
+
+- clarified the README survival demonstration so users can distinguish the
+  unadjusted Kaplan-Meier curves from the continuous and grouped Cox tests,
+  identify the covariate adjustment set and complete-case basis, and interpret
+  forest-plot encodings and p values correctly
+
 # 2026-10-24
 
 - repaired portable container builds behind an HTTPS-inspecting network by accepting an optional BuildKit CA secret without embedding institutional trust material in the image or repository

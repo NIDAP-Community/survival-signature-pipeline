@@ -1,5 +1,18 @@
 # Session Notes
 
+## 2026-10-25 README Result-Interpretation Clarification
+
+- Reworked the public METABRIC PAM50 proliferation-module demonstration text so
+  it identifies the test represented by every KM-statistics row, the endpoint
+  mapping, tertile display basis, adjustment set, complete-case sample/event
+  counts, and the difference between Cox Wald p values and an omnibus log-rank
+  test.
+- Expanded the overall-effect and full-adjusted-model forest captions to state
+  the reference effect, logarithmic HR scale, confidence intervals, marker
+  encoding, and endpoint-specific interpretation.
+- Traced all four tracked README images and the example table to the matching
+  final-tertiles run artifacts before documenting them.
+
 ## 2026-10-24 Container Distribution and Documentation Standardization
 
 - Completed local and hosted linux/amd64 container validation, including the
