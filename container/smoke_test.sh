@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Run the maintained expression, binary-biomarker, and continuous-biomarker
-# fixtures inside an already built image and assert the minimal portable
-# artifact contract. The temporary output directory is retained after
-# completion so failures and generated files are inspectable.
+# fixtures, including immune-score and cell-fraction contexts, inside an
+# already built image and assert the minimal portable artifact contract. The
+# temporary output directory is retained after completion so failures and
+# generated files are inspectable.
 
 set -euo pipefail
 
@@ -13,6 +14,8 @@ smoke_root="$(mktemp -d "${TMPDIR:-/tmp}/survival-container-smoke.XXXXXX")"
 expression_output_dir="${smoke_root}/expression_output"
 binary_output_dir="${smoke_root}/binary_output"
 continuous_output_dir="${smoke_root}/continuous_output"
+estimate_output_dir="${smoke_root}/estimate_output"
+fraction_output_dir="${smoke_root}/fraction_output"
 
 "${script_dir}/run_docker.sh" \
   "${image_tag}" \
@@ -22,6 +25,32 @@ continuous_output_dir="${smoke_root}/continuous_output"
   --expr-file /data/tcga_expression.tsv \
   --meta-file /data/tcga_metadata_no_subtype.csv \
   --features GENE_D \
+  --endpoints OS \
+  --adjust-covariates none \
+  --output-dir /output
+
+"${script_dir}/run_docker.sh" \
+  "${image_tag}" \
+  "${project_dir}/test_data" \
+  "${estimate_output_dir}" \
+  single-cohort-continuous-biomarker-survival \
+  --biomarker-file /data/estimate_score_matrix.tsv \
+  --meta-file /data/tcga_metadata_no_subtype.csv \
+  --features ImmuneScore \
+  --biomarker-context estimate_scores \
+  --endpoints OS \
+  --adjust-covariates none \
+  --output-dir /output
+
+"${script_dir}/run_docker.sh" \
+  "${image_tag}" \
+  "${project_dir}/test_data" \
+  "${fraction_output_dir}" \
+  single-cohort-continuous-biomarker-survival \
+  --biomarker-file /data/cell_fraction_matrix.tsv \
+  --meta-file /data/tcga_metadata_no_subtype.csv \
+  --features CD8_T_cells \
+  --biomarker-context cell_fractions \
   --endpoints OS \
   --adjust-covariates none \
   --output-dir /output
@@ -74,6 +103,12 @@ required_files=(
   "${continuous_output_dir}/OS/grouped_biomarker_cox_results.csv"
   "${continuous_output_dir}/OS/OS_results.rds"
   "${continuous_output_dir}/OS/KM_MYC_log2_copy_number.png"
+  "${estimate_output_dir}/RUN_METADATA.md"
+  "${estimate_output_dir}/continuous_biomarker_definition.csv"
+  "${estimate_output_dir}/OS/KM_ImmuneScore.png"
+  "${fraction_output_dir}/RUN_METADATA.md"
+  "${fraction_output_dir}/continuous_biomarker_definition.csv"
+  "${fraction_output_dir}/OS/KM_CD8_T_cells.png"
 )
 
 for required_file in "${required_files[@]}"; do

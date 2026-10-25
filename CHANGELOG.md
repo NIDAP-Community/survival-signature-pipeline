@@ -1,5 +1,8 @@
 # 2026-10-25
 
+- added explicit ESTIMATE-score and cell-fraction contexts to the maintained continuous-biomarker workflow, including score provenance notes and immune-specific result interpretation
+- added strict relative-composition validation for cell-fraction runs: all staged components must be finite fractions in [0,1] and complete subject totals must equal one within a configurable tolerance
+- documented that cell-fraction results are exploratory one-feature associations rather than multivariable compositional survival models, and added ESTIMATE and cell-fraction smoke fixtures
 - added a maintained continuous molecular-biomarker workflow for prepared numeric feature matrices, initially covering copy-number-like values without imposing a calling threshold
 - defined continuous Cox estimates as per within-cohort standard deviation and kept tertile/quartile/median splits limited to grouped KM and grouped Cox displays
 - added numeric validation, a synthetic continuous fixture, portable container smoke coverage, and OncoChat staging guidance that leaves normalization and amplification/deletion calls upstream

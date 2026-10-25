@@ -35,6 +35,8 @@ At a minimum, a single-cohort request supplies:
 | Expression table | Delimited table with a unique gene identifier column and sample columns, for expression/signature requests. |
 | Binary biomarker table | Delimited table with a unique feature column and subject columns containing only 0, 1, or missing, for binary-biomarker requests. |
 | Continuous biomarker table | Delimited table with a unique feature column and subject columns containing finite numeric values or missing, for continuous-biomarker requests. |
+| Immune-score provenance | For prepared ESTIMATE scores, retain the upstream score method, version, source object identifiers, and any normalization or filtering performed before staging. |
+| Cell-fraction composition | For relative cell fractions, stage the complete component set for every subject, use values in [0, 1], and verify each subject composition sums to one within the configured tolerance. |
 | Metadata table | Delimited table with a unique sample identifier column and paired endpoint event/time columns. |
 | Optional analysis plan | CSV plan only when running single-cohort-analysis-plan. |
 
@@ -66,6 +68,7 @@ The application request should include:
 | Grouping and analysis settings | Constrain values to the driver’s documented enums and safe numeric ranges. |
 | Binary biomarker selections | For the binary workflow, stage an approved 0/1 matrix, verify feature and subject identifiers, and pass only configured labels for 0 and 1. Do not ask the container to query PostgreSQL or derive mutation calls. |
 | Continuous biomarker selections | For the continuous workflow, stage an approved numeric matrix, verify finite values and subject identifiers, and constrain KM split choices to documented values. Do not ask the container to normalize copy number or derive amplification/deletion calls. |
+| Immune measurement selections | Use `estimate_scores` only for prepared ESTIMATE-like numeric scores and retain their upstream provenance. Use `cell_fractions` only for complete relative compositions; reject out-of-range values, incomplete all-component compositions, or totals outside the configured tolerance. Explain that per-cell-type results are exploratory one-feature associations, not compositional multivariable models. |
 
 The adapter should set a unique output directory under /output itself. It must
 not let callers choose an arbitrary output path.
@@ -104,6 +107,11 @@ For a completed continuous-biomarker run, collect the same run-level
 provenance and endpoint artifacts. Present the continuous Cox estimate as a
 within-cohort standardized association, and clearly distinguish it from an
 upstream-defined amplification/deletion call.
+
+For an immune-score run, retain the score-provenance record alongside the
+run-level outputs. For a cell-fraction run, retain the selected fraction
+context and tolerance from `RUN_METADATA.md`; do not label a result as a
+cell-intrinsic effect or a multivariable composition result.
 
 ## Required Application Guards
 

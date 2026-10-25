@@ -1,0 +1,4 @@
+Feature	TCGA_Basal_01_A	TCGA_Basal_01_B	TCGA_Basal_01_C	TCGA_Basal_01_D	TCGA_Basal_01_E	TCGA_Basal_01_F	TCGA_LumA_01_A	TCGA_LumA_01_B	TCGA_LumA_01_C	TCGA_LumA_01_D
+CD8_T_cells	0.50	0.43	0.37	0.31	0.25	0.18	0.46	0.39	0.28	0.21
+Macrophages	0.30	0.34	0.38	0.42	0.46	0.50	0.32	0.36	0.44	0.48
+Other_cells	0.20	0.23	0.25	0.27	0.29	0.32	0.22	0.25	0.28	0.31

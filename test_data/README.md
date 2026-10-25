@@ -41,6 +41,8 @@ This command exercises a real maintained workflow through entrypoint.R while als
 - tcga_expression.tsv
 - binary_biomarker_matrix.tsv
 - continuous_biomarker_matrix.tsv
+- estimate_score_matrix.tsv
+- cell_fraction_matrix.tsv
 - tcga_metadata.csv
 - tcga_metadata_no_subtype.csv
 - metabric_expression.tsv
@@ -80,6 +82,39 @@ interpretable copy-number dataset.
   --endpoints OS \
   --adjust-covariates none \
   --output-dir results/continuous_biomarker_smoke
+```
+
+## Immune Measurement Smoke Tests
+
+`estimate_score_matrix.tsv` is a synthetic ESTIMATE-like score matrix. Use
+the `estimate_scores` context so the run records that scores were prepared
+upstream rather than calculated in the container.
+
+```bash
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-continuous-biomarker-survival \
+  --biomarker-file test_data/estimate_score_matrix.tsv \
+  --meta-file test_data/tcga_metadata_no_subtype.csv \
+  --features ImmuneScore \
+  --biomarker-context estimate_scores \
+  --endpoints OS \
+  --adjust-covariates none \
+  --output-dir results/estimate_score_smoke
+```
+
+`cell_fraction_matrix.tsv` is a synthetic complete three-component relative
+composition. The `cell_fractions` context requires every subject to have all
+components, then checks that values are bounded and each composition sums to
+one; it is not suitable for absolute scores.
+
+```bash
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-continuous-biomarker-survival \
+  --biomarker-file test_data/cell_fraction_matrix.tsv \
+  --meta-file test_data/tcga_metadata_no_subtype.csv \
+  --features CD8_T_cells \
+  --biomarker-context cell_fractions \
+  --endpoints OS \
+  --adjust-covariates none \
+  --output-dir results/cell_fraction_smoke
 ```
 
 ## Example Commands

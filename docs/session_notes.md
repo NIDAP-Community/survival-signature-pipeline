@@ -1,5 +1,17 @@
 # Session Notes
 
+## 2026-10-25 Immune Score and Cell-Fraction Contexts
+
+- Extended the maintained continuous-biomarker workflow with explicit
+  `estimate_scores` and `cell_fractions` contexts. ESTIMATE score calculation
+  remains upstream; the run records the declared context and its provenance
+  boundary.
+- The cell-fraction context validates a complete relative composition: every
+  subject must have every component present, values must be in [0,1], and
+  subject totals must equal one within the configured tolerance.
+- Per-cell-type KM and Cox outputs are explicitly exploratory one-feature
+  associations, not a replacement for a multivariable compositional model.
+
 ## 2026-10-25 Continuous Molecular-Biomarker Survival Workflow
 
 - Added `single-cohort-continuous-biomarker-survival` as a maintained separate

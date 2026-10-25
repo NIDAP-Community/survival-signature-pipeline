@@ -233,6 +233,12 @@ MYC_log2_copy_number     0.42      -0.11     0.67
 
 It does not normalize copy number or turn a numeric value into a deletion/amplification call. Those choices belong to the upstream data-preparation contract.
 
+### Immune-score and cell-fraction contexts
+
+The continuous workflow also accepts prepared immune measurements. Use `--biomarker-context estimate_scores` for ESTIMATE-derived score rows such as `ESTIMATEScore`, `ImmuneScore`, and `StromalScore`. The container does not calculate ESTIMATE; the staged table must retain the upstream method, version, and cohort provenance.
+
+Use `--biomarker-context cell_fractions` only for a complete cell-fraction composition. It requires every subject to have every staged component, every fraction to be in `[0, 1]`, and each subject column to sum to one within `--fraction-sum-tolerance` (default `0.02`). A CD8 T-cell association in this mode is an exploratory one-feature analysis, not a multivariable compositional survival model. Do not use this context for unbounded immune scores or CIBERSORT absolute-mode values.
+
 ### Gene identifiers
 
 The maintained gene-consuming workflows can normalize user-supplied human gene symbols with the pinned `l2psupp::updategenes()` resolver (`--gene-resolution l2p`). This opt-in behavior leaves existing calls unchanged. The expression matrix is never renamed or rewritten. An exact input row is preferred; otherwise, an updated symbol is used only when it matches an existing expression row (in both matrices for a two-cohort workflow). Every run writes `tables/gene_identifier_resolution.csv`, preserving the submitted name, L2P result, package version, matched expression row, and any unresolved gene.
@@ -356,6 +362,36 @@ This workflow accepts prepared numeric data without treating values as expressio
 ```
 
 The primary continuous Cox result is per one standard deviation of the submitted feature among eligible cohort members. The selected split affects only grouped KM and grouped Cox results. Use a separately documented binary matrix when a study-specific amplification/deletion threshold is scientifically required.
+
+### ESTIMATE immune scores
+
+Run prepared ESTIMATE scores through the same continuous workflow, identifying the context in provenance and summaries:
+
+```bash
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-continuous-biomarker-survival \
+  --biomarker-file test_data/estimate_score_matrix.tsv \
+  --meta-file test_data/tcga_metadata_no_subtype.csv \
+  --features ImmuneScore \
+  --biomarker-context estimate_scores \
+  --endpoints OS,PFI \
+  --adjust-covariates none \
+  --output-dir results/estimate_score_smoke
+```
+
+### CIBERSORT-like cell fractions
+
+For complete relative-abundance output, use the fraction context. Include all components from the composition in the staged table even when analyzing one feature:
+
+```bash
+./scripts/run_rscript_project.sh entrypoint.R single-cohort-continuous-biomarker-survival \
+  --biomarker-file test_data/cell_fraction_matrix.tsv \
+  --meta-file test_data/tcga_metadata_no_subtype.csv \
+  --features CD8_T_cells \
+  --biomarker-context cell_fractions \
+  --endpoints OS \
+  --adjust-covariates none \
+  --output-dir results/cell_fraction_smoke
+```
 
 ## Run a Declarative Analysis Plan
 
